@@ -1,7 +1,66 @@
+// Security PIN Protection (Default PIN: 1234)
+const SECURITY_PIN = "1234";
+
+function checkAuth() {
+  const isAuth = sessionStorage.getItem('terminal_auth');
+  const modal = document.getElementById('pinLockModal');
+  if (isAuth === 'true') {
+    if (modal) modal.style.display = 'none';
+    return true;
+  } else {
+    if (modal) modal.style.display = 'flex';
+    setTimeout(() => {
+      const pinInput = document.getElementById('pinInput');
+      if (pinInput) pinInput.focus();
+    }, 100);
+    return false;
+  }
+}
+
+function verifyPin() {
+  const pinInput = document.getElementById('pinInput');
+  const pinError = document.getElementById('pinError');
+  const enteredPin = (pinInput.value || '').trim();
+
+  if (enteredPin === SECURITY_PIN) {
+    sessionStorage.setItem('terminal_auth', 'true');
+    const modal = document.getElementById('pinLockModal');
+    if (modal) modal.style.display = 'none';
+    pinError.textContent = '';
+    pinInput.value = '';
+    loadSettings();
+    fetchStatus();
+  } else {
+    pinError.textContent = '❌ ACCESS DENIED: Invalid Security PIN';
+    pinInput.value = '';
+    pinInput.focus();
+    pinInput.classList.add('shake');
+    setTimeout(() => pinInput.classList.remove('shake'), 500);
+  }
+}
+
+function lockTerminal() {
+  sessionStorage.removeItem('terminal_auth');
+  checkAuth();
+}
+
 // Global Chart instances and filter state
 const charts = {};
 let currentFilter = 'ALL'; // 'ALL', 'INDICES', 'BREAKOUTS'
 let searchQuery = '';
+
+// Setup PIN Enter Key listener on page load
+document.addEventListener('DOMContentLoaded', () => {
+  const pinInput = document.getElementById('pinInput');
+  if (pinInput) {
+    pinInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        verifyPin();
+      }
+    });
+  }
+  checkAuth();
+});
 
 function switchTab(tabId) {
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -331,6 +390,9 @@ function renderSymbolCard(sym, isMarketOpen) {
 
 // Fetch & Update Live Status from Server
 async function fetchStatus() {
+  if (sessionStorage.getItem('terminal_auth') !== 'true') {
+    return;
+  }
   try {
     const res = await fetch('/api/status');
     if (!res.ok) return;

@@ -413,3 +413,145 @@ input:focus, select:focus {
   border: 1px solid var(--bb-red);
   color: var(--bb-red);
 }
+
+/* ==========================================================================
+   🔒 PIN LOCK MODAL & SECURITY STYLES
+   ========================================================================== */
+.pin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 16, 0.95);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+}
+
+.pin-card {
+  background: var(--bb-panel);
+  border: 2px solid var(--bb-amber);
+  border-radius: 8px;
+  box-shadow: 0 0 35px var(--bb-amber-glow);
+  width: 90%;
+  max-width: 440px;
+  padding: 2.2rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2rem;
+}
+
+.pin-badge {
+  background: rgba(255, 176, 0, 0.12);
+  border: 1px solid var(--bb-amber);
+  color: var(--bb-amber);
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  letter-spacing: 1px;
+}
+
+.pin-header h2 {
+  font-size: 1.3rem;
+  color: #FFF;
+  margin-top: 0.4rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.pin-desc {
+  font-size: 0.85rem;
+  color: var(--bb-text-muted);
+  line-height: 1.5;
+}
+
+.pin-input-container {
+  display: flex;
+  width: 100%;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.pin-input-container input {
+  flex: 1;
+  background: #000;
+  border: 2px solid var(--bb-panel-border);
+  color: var(--bb-amber);
+  font-size: 1.6rem;
+  text-align: center;
+  letter-spacing: 8px;
+  padding: 0.7rem;
+  border-radius: 4px;
+  outline: none;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.pin-input-container input:focus {
+  border-color: var(--bb-amber);
+  box-shadow: 0 0 15px var(--bb-amber-glow);
+}
+
+.pin-submit-btn {
+  background: var(--bb-amber);
+  color: #000;
+  border: none;
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 0.9rem;
+  padding: 0 1.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pin-submit-btn:hover {
+  background: #FFC107;
+  box-shadow: 0 0 15px var(--bb-amber-glow);
+}
+
+.pin-error-msg {
+  color: var(--bb-red);
+  font-size: 0.82rem;
+  font-weight: 700;
+  min-height: 1.2rem;
+}
+
+.pin-footer {
+  font-size: 0.7rem;
+  color: var(--bb-text-muted);
+  letter-spacing: 0.5px;
+}
+
+.lock-btn {
+  background: rgba(255, 61, 0, 0.15);
+  border: 1px solid var(--bb-red);
+  color: var(--bb-red);
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+  font-family: inherit;
+  font-weight: 700;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 0.5rem;
+  transition: all 0.2s;
+}
+
+.lock-btn:hover {
+  background: var(--bb-red);
+  color: #FFF;
+}
+
+@keyframes shakeAnimation {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.shake {
+  animation: shakeAnimation 0.4s ease-in-out;
+  border-color: var(--bb-red) !important;
+}
