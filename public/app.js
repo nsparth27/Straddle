@@ -2,7 +2,7 @@
 let lockoutInterval = null;
 
 function getActivePin() {
-  return localStorage.getItem('terminal_active_pin') || '1234';
+  return localStorage.getItem('terminal_active_pin') || '2711';
 }
 
 function getFailCount() {
@@ -129,10 +129,10 @@ function verifyPin() {
     localStorage.setItem('terminal_fail_count', String(newFails));
 
     if (newFails >= 3) {
-      // 🚨 Trigger 5-minute Lockout + Change PIN to 2711
+      // 🚨 Trigger 5-minute Lockout + Change PIN to 2712
       const blockTime = Date.now() + 5 * 60 * 1000;
       localStorage.setItem('terminal_block_until', String(blockTime));
-      localStorage.setItem('terminal_active_pin', '2711'); // Dynamic PIN Change to 2711
+      localStorage.setItem('terminal_active_pin', '2712'); // Dynamic PIN Change to 2712
       pinError.textContent = '⛔ 3 Failed Attempts: Access Blocked for 5 Minutes!';
       updateLockoutUI();
     } else {
