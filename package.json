@@ -1,0 +1,24 @@
+{
+  "name": "dhan-straddle-pro",
+  "version": "1.0.0",
+  "description": "Bloomberg Terminal - Dhan Straddle Pro Real-Time F&O Scanner and Telegram Bot",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node -e \"console.log('Setup OK')\""
+  },
+  "keywords": [
+    "dhan",
+    "straddle",
+    "options-trading",
+    "nse",
+    "bloomberg-terminal",
+    "telegram-bot"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {}
+}
