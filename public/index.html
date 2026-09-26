@@ -15,20 +15,28 @@
   <!-- Security PIN Lock Modal -->
   <div id="pinLockModal" class="pin-modal-overlay">
     <div class="pin-card">
-      <div class="pin-badge">🔒 SECURITY LEVEL 1</div>
+      <div class="pin-badge" id="pinBadge">🔒 SECURITY LEVEL 1</div>
       <div class="pin-header">
         <span class="tag">BLOOMBERG AUTH</span>
         <h2>ENTER ACCESS PIN</h2>
       </div>
-      <p class="pin-desc">This terminal is private. Enter the 4-digit security PIN to unlock live market data & controls.</p>
+      <p class="pin-desc" id="pinDesc">This terminal is private. Enter the 4-digit security PIN to unlock live market data & controls.</p>
       
-      <div class="pin-input-container">
+      <div class="pin-input-container" id="pinInputContainer">
         <input type="password" id="pinInput" maxlength="4" placeholder="••••" autocomplete="off" autofocus inputmode="numeric" />
-        <button class="pin-submit-btn" onclick="verifyPin()">UNLOCK [ ↵ ]</button>
+        <button class="pin-submit-btn" id="pinSubmitBtn" onclick="verifyPin()">UNLOCK [ ↵ ]</button>
       </div>
       
       <div id="pinError" class="pin-error-msg"></div>
-      <div class="pin-footer">SECURED BY 256-BIT ENCRYPTION</div>
+
+      <!-- 3-Attempts Lockout Message & Timer -->
+      <div id="pinLockoutBox" class="pin-lockout-box" style="display: none;">
+        <div class="lockout-timer" id="lockoutTimer">⏳ 05:00</div>
+        <div class="lockout-msg">🚫 <b>TERMINAL LOCKED (3 Failed Attempts)</b></div>
+        <div class="lockout-tribute">💬 If you want the PIN, send <b>₹1,000</b> to <b>Parth Dhulla</b>.</div>
+      </div>
+
+      <div class="pin-footer" id="pinAttemptsLabel">Attempts remaining: 3 / 3</div>
     </div>
   </div>
 

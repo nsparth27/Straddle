@@ -555,3 +555,39 @@ input:focus, select:focus {
   animation: shakeAnimation 0.4s ease-in-out;
   border-color: var(--bb-red) !important;
 }
+
+.pin-lockout-box {
+  background: rgba(255, 61, 0, 0.12);
+  border: 1px solid var(--bb-red);
+  border-radius: 6px;
+  padding: 1.1rem;
+  width: 100%;
+  margin-top: 0.5rem;
+  box-shadow: 0 0 20px rgba(255, 61, 0, 0.25);
+}
+
+.lockout-timer {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--bb-amber);
+  text-shadow: 0 0 10px var(--bb-amber-glow);
+  letter-spacing: 2px;
+  margin-bottom: 0.4rem;
+}
+
+.lockout-msg {
+  color: var(--bb-red);
+  font-size: 0.88rem;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+}
+
+.lockout-tribute {
+  font-size: 0.85rem;
+  color: #FFF;
+  background: #000;
+  padding: 0.6rem 0.8rem;
+  border-radius: 4px;
+  border: 1px dashed var(--bb-amber);
+  line-height: 1.5;
+}

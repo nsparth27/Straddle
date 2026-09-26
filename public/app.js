@@ -1,5 +1,86 @@
-// Security PIN Protection (Default PIN: 1234)
-const SECURITY_PIN = "1234";
+// Security PIN Protection & 3-Attempts Lockout Engine
+let lockoutInterval = null;
+
+function getActivePin() {
+  return localStorage.getItem('terminal_active_pin') || '1234';
+}
+
+function getFailCount() {
+  return parseInt(localStorage.getItem('terminal_fail_count') || '0', 10);
+}
+
+function getBlockUntil() {
+  return parseInt(localStorage.getItem('terminal_block_until') || '0', 10);
+}
+
+function updateLockoutUI() {
+  const blockUntil = getBlockUntil();
+  const now = Date.now();
+  const lockoutBox = document.getElementById('pinLockoutBox');
+  const pinInput = document.getElementById('pinInput');
+  const pinSubmitBtn = document.getElementById('pinSubmitBtn');
+  const attemptsLabel = document.getElementById('pinAttemptsLabel');
+  const timerEl = document.getElementById('lockoutTimer');
+  const pinError = document.getElementById('pinError');
+  const pinBadge = document.getElementById('pinBadge');
+
+  if (blockUntil > now) {
+    // Currently in 5-minute Lockout Mode
+    if (lockoutBox) lockoutBox.style.display = 'block';
+    if (pinInput) {
+      pinInput.disabled = true;
+      pinInput.placeholder = 'LOCKED';
+    }
+    if (pinSubmitBtn) pinSubmitBtn.disabled = true;
+    if (pinBadge) {
+      pinBadge.textContent = '⛔ TERMINAL BLOCKED';
+      pinBadge.style.borderColor = 'var(--bb-red)';
+      pinBadge.style.color = 'var(--bb-red)';
+      pinBadge.style.background = 'rgba(255, 61, 0, 0.15)';
+    }
+    if (attemptsLabel) attemptsLabel.textContent = '🔒 Access locked for 5 minutes';
+
+    const remainingSec = Math.ceil((blockUntil - now) / 1000);
+    const mins = String(Math.floor(remainingSec / 60)).padStart(2, '0');
+    const secs = String(remainingSec % 60).padStart(2, '0');
+    if (timerEl) timerEl.textContent = `⏳ ${mins}:${secs}`;
+
+    if (!lockoutInterval) {
+      lockoutInterval = setInterval(updateLockoutUI, 1000);
+    }
+  } else {
+    // Normal / Unlocked Mode
+    if (lockoutInterval) {
+      clearInterval(lockoutInterval);
+      lockoutInterval = null;
+    }
+    if (blockUntil > 0 && blockUntil <= now) {
+      // 5-minute lockout finished! Reset attempts, keep new PIN (2711)
+      localStorage.removeItem('terminal_block_until');
+      localStorage.setItem('terminal_fail_count', '0');
+      if (pinError) pinError.textContent = 'ℹ️ Lockout expired. You may try again.';
+    }
+
+    if (lockoutBox) lockoutBox.style.display = 'none';
+    if (pinInput) {
+      pinInput.disabled = false;
+      pinInput.placeholder = '••••';
+    }
+    if (pinSubmitBtn) pinSubmitBtn.disabled = false;
+    if (pinBadge) {
+      pinBadge.textContent = '🔒 SECURITY LEVEL 1';
+      pinBadge.style.borderColor = 'var(--bb-amber)';
+      pinBadge.style.color = 'var(--bb-amber)';
+      pinBadge.style.background = 'rgba(255, 176, 0, 0.12)';
+    }
+
+    const fails = getFailCount();
+    const remainingAttempts = Math.max(0, 3 - fails);
+    if (attemptsLabel) {
+      attemptsLabel.textContent = `Attempts remaining: ${remainingAttempts} / 3`;
+    }
+  }
+}
 
 function checkAuth() {
   const isAuth = sessionStorage.getItem('terminal_auth');
@@ -9,21 +90,33 @@ function checkAuth() {
     return true;
   } else {
     if (modal) modal.style.display = 'flex';
+    updateLockoutUI();
     setTimeout(() => {
       const pinInput = document.getElementById('pinInput');
-      if (pinInput) pinInput.focus();
+      if (pinInput && !pinInput.disabled) pinInput.focus();
     }, 100);
     return false;
   }
 }
 
 function verifyPin() {
+  const now = Date.now();
+  if (getBlockUntil() > now) {
+    updateLockoutUI();
+    return;
+  }
+
   const pinInput = document.getElementById('pinInput');
   const pinError = document.getElementById('pinError');
   const enteredPin = (pinInput.value || '').trim();
+  const currentPin = getActivePin();
 
-  if (enteredPin === SECURITY_PIN) {
+  if (enteredPin === currentPin) {
+    // Successful Authentication
     sessionStorage.setItem('terminal_auth', 'true');
+    localStorage.setItem('terminal_fail_count', '0');
+    localStorage.removeItem('terminal_block_until');
+    
     const modal = document.getElementById('pinLockModal');
     if (modal) modal.style.display = 'none';
     pinError.textContent = '';
@@ -31,11 +124,26 @@ function verifyPin() {
     loadSettings();
     fetchStatus();
   } else {
-    pinError.textContent = '❌ ACCESS DENIED: Invalid Security PIN';
-    pinInput.value = '';
-    pinInput.focus();
-    pinInput.classList.add('shake');
-    setTimeout(() => pinInput.classList.remove('shake'), 500);
+    // Failed Authentication Attempt
+    const newFails = getFailCount() + 1;
+    localStorage.setItem('terminal_fail_count', String(newFails));
+
+    if (newFails >= 3) {
+      // 🚨 Trigger 5-minute Lockout + Change PIN to 2711
+      const blockTime = Date.now() + 5 * 60 * 1000;
+      localStorage.setItem('terminal_block_until', String(blockTime));
+      localStorage.setItem('terminal_active_pin', '2711'); // Dynamic PIN Change to 2711
+      pinError.textContent = '⛔ 3 Failed Attempts: Access Blocked for 5 Minutes!';
+      updateLockoutUI();
+    } else {
+      const left = 3 - newFails;
+      pinError.textContent = `❌ ACCESS DENIED: Invalid Security PIN (${left} attempt${left > 1 ? 's' : ''} left)`;
+      pinInput.value = '';
+      pinInput.focus();
+      pinInput.classList.add('shake');
+      setTimeout(() => pinInput.classList.remove('shake'), 500);
+      updateLockoutUI();
+    }
   }
 }
 
