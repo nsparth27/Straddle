@@ -8,15 +8,30 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchStatus();
 });
 
+// Global State
+let lastSymbolsMap = {};
+
 function switchTab(tabId) {
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
-  const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+  const tabBtnMap = {
+    dashboard: 'tabBtnDashboard',
+    alerts: 'tabBtnAlerts',
+    settings: 'tabBtnSettings',
+    radar: 'tabBtnRadar'
+  };
+
+  const targetBtn = document.getElementById(tabBtnMap[tabId]) ||
+    Array.from(document.querySelectorAll('.tab-btn')).find(b => (b.getAttribute('onclick') || '').includes(tabId));
   if (targetBtn) targetBtn.classList.add('active');
 
   const targetContent = document.getElementById(`tab-${tabId}`);
   if (targetContent) targetContent.classList.add('active');
+
+  if (tabId === 'radar') {
+    renderRadarLeaderboard();
+  }
 }
 
 // Clock Manager (IST)
@@ -555,6 +570,7 @@ async function fetchStatus() {
 
     // Update Ticker Top Tape
     const symbolsMap = state.symbols || {};
+    lastSymbolsMap = symbolsMap;
     if (symbolsMap['NIFTY']) {
       document.getElementById('tNiftySpot').textContent = `₹${symbolsMap['NIFTY'].spotPrice}`;
       document.getElementById('tNiftyStraddle').textContent = `Straddle: ₹${symbolsMap['NIFTY'].straddlePrice}`;
@@ -637,6 +653,9 @@ async function fetchStatus() {
 
     // Render the table with filters & sort
     renderTelegramMessagesTable();
+
+    // 6. Real-Time Breakout Radar & Alpha Leaderboard Updates
+    renderRadarLeaderboard(symbolsMap);
 
   } catch (err) {
     console.error('Fetch status error:', err);
@@ -1386,45 +1405,28 @@ function renderRadarLeaderboard(providedSymbolsMap = null) {
   }).join('');
 }
 
-let lastSymbolsMap = {};
-
-// Close modals on Escape key
+// Global Keyboard Shortcuts (Escape to close modals, F1-F4 to switch workspace tabs)
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closePreviewModal();
     closeMsgModal();
     closeTestModal();
     closeCrossoverSummaryModal();
+  } else if (e.key === 'F1') {
+    e.preventDefault();
+    switchTab('dashboard');
+  } else if (e.key === 'F2') {
+    e.preventDefault();
+    switchTab('alerts');
+  } else if (e.key === 'F3') {
+    e.preventDefault();
+    switchTab('settings');
+  } else if (e.key === 'F4') {
+    e.preventDefault();
+    switchTab('radar');
   }
 });
 
-// Update switchTab to render Radar when selected
-const originalSwitchTab = switchTab;
-switchTab = function(tabId) {
-  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-
-  const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
-  if (targetBtn) targetBtn.classList.add('active');
-
-  const targetContent = document.getElementById(`tab-${tabId}`);
-  if (targetContent) targetContent.classList.add('active');
-
-  if (tabId === 'radar') {
-    renderRadarLeaderboard();
-  }
-};
-
-// Hook into fetchStatus to automatically update Radar Leaderboard
-const origFetchStatus = fetchStatus;
-fetchStatus = async function() {
-  await origFetchStatus();
-  if (document.getElementById('tab-radar')?.classList.contains('active')) {
-    renderRadarLeaderboard();
-  }
-};
-
-// Start Live Polling
+// Start Live Status Polling
 setInterval(fetchStatus, 2000);
-fetchStatus();
 
