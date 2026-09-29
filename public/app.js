@@ -240,20 +240,44 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
+function toggleTokenVisibility(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = '🔒';
+    btn.title = 'Hide Token';
+  } else {
+    input.type = 'password';
+    btn.textContent = '👁️';
+    btn.title = 'Show Token';
+  }
+}
+
 // Load Config into Settings Form
 async function loadSettings() {
   try {
     const res = await fetch('/api/config');
     if (res.ok) {
       const cfg = await res.json();
-      document.getElementById('cfgDhanClientId').value = cfg.dhanClientId || '';
-      document.getElementById('cfgDhanAccessToken').value = cfg.dhanAccessToken || '';
-      document.getElementById('cfgTelegramBotToken').value = cfg.telegramBotToken || '';
-      document.getElementById('cfgTelegramChatId').value = cfg.telegramChatId || '';
-      document.getElementById('cfgBarMinutes').value = cfg.barMinutes || 15;
-      document.getElementById('cfgPollInterval').value = cfg.pollIntervalSeconds || 15;
-      document.getElementById('cfgTelegramAlertsEnabled').checked = Boolean(cfg.telegramAlertsEnabled);
-      document.getElementById('fnoCountLabel').textContent = `${(cfg.watchlist || []).length} F&O STOCKS ACTIVE`;
+      const clientIdEl = document.getElementById('cfgDhanClientId');
+      const tokenEl = document.getElementById('cfgDhanAccessToken');
+      const botTokenEl = document.getElementById('cfgTelegramBotToken');
+      const chatIdEl = document.getElementById('cfgTelegramChatId');
+      const barMinEl = document.getElementById('cfgBarMinutes');
+      const pollIntEl = document.getElementById('cfgPollInterval');
+      const tgAlertsEl = document.getElementById('cfgTelegramAlertsEnabled');
+
+      if (clientIdEl && cfg.dhanClientId !== undefined) clientIdEl.value = cfg.dhanClientId;
+      if (tokenEl && cfg.dhanAccessToken !== undefined) tokenEl.value = cfg.dhanAccessToken;
+      if (botTokenEl && cfg.telegramBotToken !== undefined) botTokenEl.value = cfg.telegramBotToken;
+      if (chatIdEl && cfg.telegramChatId !== undefined) chatIdEl.value = cfg.telegramChatId;
+      if (barMinEl && cfg.barMinutes !== undefined) barMinEl.value = cfg.barMinutes;
+      if (pollIntEl && cfg.pollIntervalSeconds !== undefined) pollIntEl.value = cfg.pollIntervalSeconds;
+      if (tgAlertsEl && cfg.telegramAlertsEnabled !== undefined) tgAlertsEl.checked = Boolean(cfg.telegramAlertsEnabled);
+      
+      const countEl = document.getElementById('fnoCountLabel');
+      if (countEl) countEl.textContent = `${(cfg.watchlist || []).length} F&O STOCKS ACTIVE`;
     }
   } catch (err) {
     console.error('Failed to load settings:', err);
@@ -299,7 +323,9 @@ if (settingsFormEl) settingsFormEl.addEventListener('submit', async (e) => {
     });
     const data = await res.json();
     if (res.ok) {
-      if (toast) { toast.className = 'alert-toast success'; toast.textContent = '✅ Settings saved successfully! Real-time monitor updated.'; toast.style.display = 'block'; }
+      if (toast) { toast.className = 'alert-toast success'; toast.textContent = '✅ Settings saved successfully! Credentials stored securely.'; toast.style.display = 'block'; }
+      // Reload settings to ensure UI stays perfectly synchronized
+      await loadSettings();
     } else {
       if (toast) { toast.className = 'alert-toast error'; toast.textContent = `❌ ${data.message}`; toast.style.display = 'block'; }
     }

@@ -309,12 +309,18 @@
 
             <div class="form-group">
               <label for="cfgDhanAccessToken">Dhan Access Token (24-hr JWT)</label>
-              <input type="password" id="cfgDhanAccessToken" placeholder="Paste your 24-hr access token" required>
+              <div style="position: relative; display: flex; align-items: center;">
+                <input type="password" id="cfgDhanAccessToken" placeholder="Paste your 24-hr access token" style="width: 100%; padding-right: 2.5rem;" required autocomplete="off">
+                <button type="button" onclick="toggleTokenVisibility('cfgDhanAccessToken', this)" style="position: absolute; right: 0.5rem; background: none; border: none; color: var(--bb-text-muted); cursor: pointer; font-size: 1rem; padding: 0.2rem;" title="Show/Hide Token">👁️</button>
+              </div>
             </div>
 
             <div class="form-group">
               <label for="cfgTelegramBotToken">Telegram Bot Token</label>
-              <input type="password" id="cfgTelegramBotToken" placeholder="e.g. 8867203270:AAHTfS8..." required>
+              <div style="position: relative; display: flex; align-items: center;">
+                <input type="password" id="cfgTelegramBotToken" placeholder="e.g. 8867203270:AAHTfS8..." style="width: 100%; padding-right: 2.5rem;" required autocomplete="off">
+                <button type="button" onclick="toggleTokenVisibility('cfgTelegramBotToken', this)" style="position: absolute; right: 0.5rem; background: none; border: none; color: var(--bb-text-muted); cursor: pointer; font-size: 1rem; padding: 0.2rem;" title="Show/Hide Token">👁️</button>
+              </div>
             </div>
 
             <div class="form-group">

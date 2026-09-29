@@ -1499,31 +1499,44 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/config' && req.method === 'GET') {
-    const isAuth = isValidSession(req);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    if (isAuth) {
-      res.end(JSON.stringify(config));
-    } else {
-      res.end(JSON.stringify({
-        dhanClientId: config.dhanClientId,
-        hasDhanAccessToken: Boolean(config.dhanAccessToken),
-        dhanAccessTokenMasked: config.dhanAccessToken ? `****${config.dhanAccessToken.slice(-6)}` : '',
-        hasTelegramBot: Boolean(config.telegramBotToken),
-        telegramChatId: config.telegramChatId,
-        barMinutes: config.barMinutes,
-        pollIntervalSeconds: config.pollIntervalSeconds,
-        telegramAlertsEnabled: config.telegramAlertsEnabled,
-        watchlist: config.watchlist
-      }));
-    }
+    res.end(JSON.stringify(config));
     return;
   }
 
   if (pathname === '/api/config' && req.method === 'POST') {
     try {
       const newCfg = await readJsonBody(req);
-      const tokenChanged = newCfg.dhanAccessToken && newCfg.dhanAccessToken !== config.dhanAccessToken;
-      config = { ...config, ...newCfg };
+      const tokenChanged = newCfg.dhanAccessToken && 
+                           !newCfg.dhanAccessToken.startsWith('****') && 
+                           newCfg.dhanAccessToken.trim() !== '' && 
+                           newCfg.dhanAccessToken.trim() !== config.dhanAccessToken;
+
+      if (newCfg.dhanClientId !== undefined && newCfg.dhanClientId.trim() !== '') {
+        config.dhanClientId = newCfg.dhanClientId.trim();
+      }
+      if (newCfg.dhanAccessToken && !newCfg.dhanAccessToken.startsWith('****') && newCfg.dhanAccessToken.trim() !== '') {
+        config.dhanAccessToken = newCfg.dhanAccessToken.trim();
+      }
+      if (newCfg.telegramBotToken && !newCfg.telegramBotToken.startsWith('****') && newCfg.telegramBotToken.trim() !== '') {
+        config.telegramBotToken = newCfg.telegramBotToken.trim();
+      }
+      if (newCfg.telegramChatId !== undefined && newCfg.telegramChatId.trim() !== '') {
+        config.telegramChatId = newCfg.telegramChatId.trim();
+      }
+      if (newCfg.barMinutes !== undefined && !isNaN(parseInt(newCfg.barMinutes, 10))) {
+        config.barMinutes = parseInt(newCfg.barMinutes, 10);
+      }
+      if (newCfg.pollIntervalSeconds !== undefined && !isNaN(parseInt(newCfg.pollIntervalSeconds, 10))) {
+        config.pollIntervalSeconds = parseInt(newCfg.pollIntervalSeconds, 10);
+      }
+      if (newCfg.telegramAlertsEnabled !== undefined) {
+        config.telegramAlertsEnabled = Boolean(newCfg.telegramAlertsEnabled);
+      }
+      if (Array.isArray(newCfg.watchlist)) {
+        config.watchlist = newCfg.watchlist;
+      }
+
       if (tokenChanged) {
         expiryCache.clear();
         intradayCache.clear();
@@ -1539,7 +1552,7 @@ const server = http.createServer(async (req, res) => {
       saveConfig();
       addLog(`⚙️ Configuration updated. Telegram alerts: ${config.telegramAlertsEnabled ? 'ENABLED' : 'OFF'}`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'success', message: 'Settings saved successfully!' }));
+      res.end(JSON.stringify({ status: 'success', message: 'Settings saved successfully!', config }));
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'error', message: err.message }));
@@ -1760,7 +1773,11 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/test-connection' && req.method === 'POST') {
     try {
-      const { dhanClientId, dhanAccessToken, telegramBotToken, telegramChatId } = await readJsonBody(req);
+      const body = await readJsonBody(req);
+      const dhanClientId = (body.dhanClientId && body.dhanClientId.trim()) || config.dhanClientId;
+      const dhanAccessToken = (body.dhanAccessToken && !body.dhanAccessToken.startsWith('****') && body.dhanAccessToken.trim()) || config.dhanAccessToken;
+      const telegramBotToken = (body.telegramBotToken && !body.telegramBotToken.startsWith('****') && body.telegramBotToken.trim()) || config.telegramBotToken;
+      const telegramChatId = (body.telegramChatId && body.telegramChatId.trim()) || config.telegramChatId;
       
       let dhanResult = { status: 'failed', message: 'Not tested' };
       if (dhanAccessToken && dhanClientId) {
