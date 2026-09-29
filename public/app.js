@@ -19,7 +19,8 @@ function switchTab(tabId) {
     dashboard: 'tabBtnDashboard',
     alerts: 'tabBtnAlerts',
     settings: 'tabBtnSettings',
-    radar: 'tabBtnRadar'
+    radar: 'tabBtnRadar',
+    charts: 'tabBtnCharts'
   };
 
   const targetBtn = document.getElementById(tabBtnMap[tabId]) ||
@@ -31,6 +32,8 @@ function switchTab(tabId) {
 
   if (tabId === 'radar') {
     renderRadarLeaderboard();
+  } else if (tabId === 'charts') {
+    renderActiveRuleTable();
   }
 }
 
@@ -656,6 +659,9 @@ async function fetchStatus() {
 
     // 6. Real-Time Breakout Radar & Alpha Leaderboard Updates
     renderRadarLeaderboard(symbolsMap);
+
+    // 7. Real-Time Quant Strategy Charts & Barometer Suite
+    renderActiveRuleTable(symbolsMap);
 
   } catch (err) {
     console.error('Fetch status error:', err);
@@ -1405,7 +1411,7 @@ function renderRadarLeaderboard(providedSymbolsMap = null) {
   }).join('');
 }
 
-// Global Keyboard Shortcuts (Escape to close modals, F1-F4 to switch workspace tabs)
+// Global Keyboard Shortcuts (Escape to close modals, F1-F5 to switch workspace tabs)
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closePreviewModal();
@@ -1424,9 +1430,424 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'F4') {
     e.preventDefault();
     switchTab('radar');
+  } else if (e.key === 'F5') {
+    e.preventDefault();
+    switchTab('charts');
   }
 });
 
+// =========================================================================
+// 📊 TAB 5: QUANT STRATEGY CHARTS & MULTI-RULE ENGINE
+// =========================================================================
+let activeRuleChart = 'RULE_DIVERGING';
+let activeQuantFilter = 'ALL';
+let quantSearchQuery = '';
+let quantBloombergChartInstance = null;
+
+function setRuleChart(ruleName) {
+  activeRuleChart = ruleName;
+  document.querySelectorAll('#tab-charts .rule-tab-btn').forEach(btn => btn.classList.remove('active'));
+  const btnMap = {
+    'RULE_DIVERGING': 'btnRuleDiverging',
+    'RULE_MULTI_CROSS': 'btnRuleMulti',
+    'RULE_SKEW': 'btnRuleSkew',
+    'RULE_STALKING': 'btnRuleStalking',
+    'RULE_BLOOMBERG': 'btnRuleBloomberg',
+    'RULE_BARBELL': 'btnRuleBarbell'
+  };
+  if (btnMap[ruleName]) document.getElementById(btnMap[ruleName])?.classList.add('active');
+
+  const tableWrap = document.getElementById('quantTableHeaderWrap');
+  const rowsWrap = document.getElementById('quantRowsContainer');
+  const canvasWrap = document.getElementById('quantChartJsWrap');
+
+  if (ruleName === 'RULE_BLOOMBERG') {
+    if (tableWrap) tableWrap.style.display = 'none';
+    if (rowsWrap) rowsWrap.style.display = 'none';
+    if (canvasWrap) canvasWrap.style.display = 'block';
+    renderQuantBloombergCanvas();
+  } else {
+    if (tableWrap) tableWrap.style.display = 'grid';
+    if (rowsWrap) rowsWrap.style.display = 'flex';
+    if (canvasWrap) canvasWrap.style.display = 'none';
+    renderActiveRuleTable();
+  }
+  updateQuantRuleBanner();
+}
+
+function updateQuantRuleBanner() {
+  const bText = document.getElementById('ruleBannerText');
+  const lTitle = document.getElementById('qRuleLegendTitle');
+  const lBody = document.getElementById('qRuleLegendBody');
+  const centerTitle = document.getElementById('quantColCenterTitle');
+  const rightTitle = document.getElementById('quantColRightTitle');
+
+  if (activeRuleChart === 'RULE_DIVERGING') {
+    if (bText) bText.innerHTML = '<b>Rule 1 — PDH Diverging Barometer:</b> Measures exact % distance above or below Previous Day High (PDH).';
+    if (lTitle) lTitle.textContent = '💡 Rule 1: Breakout Divergence';
+    if (lBody) lBody.innerHTML = '• <b>Green Bars:</b> Active breakouts expanding above PDH.<br>• <b>Red Bars:</b> Consolidating stocks below PDH.<br>• <b>Gold Pin:</b> Day\'s highest peak breakout milestone.';
+    if (centerTitle) centerTitle.innerHTML = `
+      <div class="axis-ticks-container">
+        <span class="axis-tick">-15%</span><span class="axis-tick">-10%</span><span class="axis-tick">-5%</span>
+        <span class="axis-tick" style="color: #FFF; font-weight: 900;">0.0% PDH</span>
+        <span class="axis-tick">+5%</span><span class="axis-tick">+10%</span><span class="axis-tick">+15%</span>
+      </div>`;
+    if (rightTitle) rightTitle.textContent = 'MOVE VS PDH';
+  } else if (activeRuleChart === 'RULE_MULTI_CROSS') {
+    if (bText) bText.innerHTML = '<b>Rule 2 — Institutional Multi-Hit Squeeze:</b> Ranks assets by frequency of PDH re-tests & breakout velocity.';
+    if (lTitle) lTitle.textContent = '💡 Rule 2: Multi-Cross Retests';
+    if (lBody) lBody.innerHTML = '• <b>3+ Crosses (Power Trend):</b> Heavy institutional accumulation.<br>• <b>2 Crosses:</b> Confirmed breakout pullback & retest.<br>• <b>1 Cross:</b> First-mover initial breakout.';
+    if (centerTitle) centerTitle.innerHTML = '<div style="text-align:center; font-size:0.7rem; color:var(--bb-text-muted);">CROSSOVER FREQUENCY & RESILIENCE SPECTRUM</div>';
+    if (rightTitle) rightTitle.textContent = 'HITS & PEAK';
+  } else if (activeRuleChart === 'RULE_SKEW') {
+    if (bText) bText.innerHTML = '<b>Rule 3 — Call vs Put Skew Dominance:</b> Analyzes if Call buyers (CE) or Put buyers (PE) are driving the straddle explosion.';
+    if (lTitle) lTitle.textContent = '💡 Rule 3: Skew Directionality';
+    if (lBody) lBody.innerHTML = '• <b>CE > 60% (Green Dominance):</b> Massive Bullish Spot Rally.<br>• <b>PE > 60% (Red Dominance):</b> Spot Market Crash Panic.<br>• <b>45%–55%:</b> Pure Volatility / Gamma Expansion (Both legs inflating).';
+    if (centerTitle) centerTitle.innerHTML = `
+      <div style="display: flex; justify-content: space-between; font-size: 0.68rem; font-weight: 800;">
+        <span style="color: var(--bb-green);">◀ CALL LEG (CE %)</span>
+        <span style="color: var(--bb-text-muted);">ATM BALANCE (50/50)</span>
+        <span style="color: #FF5252;">PUT LEG (PE %) ▶</span>
+      </div>`;
+    if (rightTitle) rightTitle.textContent = 'SKEW RATIO';
+  } else if (activeRuleChart === 'RULE_STALKING') {
+    if (bText) bText.innerHTML = '<b>Rule 4 — Near-Breakout Stalking Radar:</b> Stocks within 0.1% to 3.0% of PDH preparing for immediate breakout.';
+    if (lTitle) lTitle.textContent = '💡 Rule 4: Pre-Breakout Stalking';
+    if (lBody) lBody.innerHTML = '• Identifies coiled springs about to punch through PDH.<br>• Allows early positioning before Telegram alert fires.<br>• Sorted by closest proximity to trigger.';
+    if (centerTitle) centerTitle.innerHTML = '<div style="text-align:center; font-size:0.7rem; color:var(--bb-amber);">DISTANCE TO PDH BREAKOUT (0% TO 3%)</div>';
+    if (rightTitle) rightTitle.textContent = 'DISTANCE';
+  } else if (activeRuleChart === 'RULE_BARBELL') {
+    if (bText) bText.innerHTML = '<b>Rule 6 — Day Range & Peak Barbell (PortfolioCharts Style):</b> Shows session low, live straddle price, and peak crossover milestone.';
+    if (lTitle) lTitle.textContent = '💡 Rule 6: Barbell Range';
+    if (lBody) lBody.innerHTML = '• <b>Red Dot:</b> Session Low.<br>• <b>Green Pill:</b> Live Price.<br>• <b>Gold Dot:</b> Peak High Milestone above PDH.';
+    if (centerTitle) centerTitle.innerHTML = '<div style="text-align:center; font-size:0.7rem; color:var(--bb-cyan);">SESSION LOW ──── LIVE STRADDLE ──── DAY PEAK</div>';
+    if (rightTitle) rightTitle.textContent = 'RANGE SPREAD';
+  }
+}
+
+function setQuantFilter(filterType) {
+  activeQuantFilter = filterType;
+  document.querySelectorAll('#tab-charts .filter-pill').forEach(p => p.classList.remove('active'));
+  const map = { 'ALL': 'qfAll', 'BREAKOUTS': 'qfBreakouts', 'MULTI': 'qfMulti', 'INDICES': 'qfIndices', 'MCX': 'qfMCX' };
+  if (map[filterType]) document.getElementById(map[filterType])?.classList.add('active');
+
+  if (activeRuleChart === 'RULE_BLOOMBERG') renderQuantBloombergCanvas();
+  else renderActiveRuleTable();
+}
+
+function onQuantSearchInput() {
+  quantSearchQuery = (document.getElementById('quantSearchInput')?.value || '').trim().toUpperCase();
+  if (activeRuleChart === 'RULE_BLOOMBERG') renderQuantBloombergCanvas();
+  else renderActiveRuleTable();
+}
+
+function renderActiveRuleTable(providedSymbolsMap = null) {
+  const container = document.getElementById('quantRowsContainer');
+  const rawMap = providedSymbolsMap || lastSymbolsMap || {};
+  const symbols = Object.values(rawMap);
+  if (symbols.length === 0) return;
+
+  const enriched = symbols.map(s => {
+    const pdh = s.prevDayHighStraddle || s.prevCloseStraddle || s.prevBarClose || 0;
+    const events = s.crossoverEvents || [];
+    const crossCount = events.length;
+    const isAbove = (s.straddlePrice > pdh && pdh > 0) || Boolean(s.breakout);
+    const pctMove = pdh > 0 ? parseFloat((((s.straddlePrice - pdh) / pdh) * 100).toFixed(2)) : 0;
+    const distToPdh = (pdh > 0 && s.straddlePrice <= pdh) ? parseFloat((((pdh - s.straddlePrice) / pdh) * 100).toFixed(2)) : 0;
+
+    let maxPeakPct = 0;
+    let maxPeakPrice = s.straddlePrice || 0;
+    if (crossCount > 0) {
+      const pcts = events.map(e => Number(e.peakPct) || (((Number(e.peakPrice) - pdh) / pdh) * 100));
+      maxPeakPct = Math.max(...pcts);
+      const peaks = events.map(e => Number(e.peakPrice) || 0);
+      maxPeakPrice = Math.max(...peaks);
+    }
+    if (!isFinite(maxPeakPct) || maxPeakPct <= 0) {
+      maxPeakPct = pctMove > 0 ? pctMove : 0;
+    }
+
+    const ce = Number(s.ceLtp) || 0;
+    const pe = Number(s.peLtp) || 0;
+    const totalLeg = (ce + pe) > 0 ? (ce + pe) : (s.straddlePrice || 1);
+    const cePct = Math.round((ce / totalLeg) * 100) || 50;
+    const pePct = 100 - cePct;
+
+    return {
+      ...s,
+      pdh,
+      crossCount,
+      isAbove,
+      pctMove,
+      distToPdh,
+      maxPeakPct,
+      maxPeakPrice,
+      cePct,
+      pePct,
+      isCommodity: s.segment === 'MCX_COMM' || ['CRUDEOIL', 'NATURALGAS', 'GOLD', 'SILVER', 'COPPER'].includes(s.name),
+      isIndex: s.segment === 'IDX_I' || ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'].includes(s.name)
+    };
+  });
+
+  // Update Sidebar
+  const above = enriched.filter(e => e.isAbove);
+  const below = enriched.filter(e => !e.isAbove);
+  const multi = enriched.filter(e => e.crossCount >= 2);
+
+  const elAbove = document.getElementById('qSideAboveCount');
+  if (elAbove) elAbove.textContent = above.length;
+  const elBelow = document.getElementById('qSideBelowCount');
+  if (elBelow) elBelow.textContent = below.length;
+  const elMulti = document.getElementById('qSideMultiCount');
+  if (elMulti) elMulti.textContent = multi.length;
+
+  const sortedByGain = [...enriched].sort((a, b) => b.pctMove - a.pctMove || b.maxPeakPct - a.maxPeakPct);
+  const champ = sortedByGain[0];
+  if (champ) {
+    const elName = document.getElementById('qSideChampName');
+    if (elName) elName.textContent = champ.name;
+    const elPct = document.getElementById('qSideChampPct');
+    if (elPct) elPct.textContent = `${champ.pctMove >= 0 ? '+' : ''}${champ.pctMove}%`;
+    const elDet = document.getElementById('qSideChampDetail');
+    if (elDet) elDet.textContent = `Live: ₹${champ.straddlePrice} • Day Peak: ₹${champ.maxPeakPrice}`;
+  }
+
+  const sortedByMulti = [...enriched].sort((a, b) => b.crossCount - a.crossCount || b.maxPeakPct - a.maxPeakPct);
+  const multiLead = sortedByMulti[0];
+  if (multiLead) {
+    const elMName = document.getElementById('qSideMultiName');
+    if (elMName) elMName.textContent = multiLead.name;
+    const elMHits = document.getElementById('qSideMultiHits');
+    if (elMHits) elMHits.textContent = `${multiLead.crossCount} Crossovers`;
+    const elMDet = document.getElementById('qSideMultiDetail');
+    if (elMDet) elMDet.textContent = `Peak Gain: +${multiLead.maxPeakPct.toFixed(1)}% above PDH`;
+  }
+
+  if (!container) return;
+
+  // Filter
+  let filtered = enriched;
+  if (quantSearchQuery) filtered = filtered.filter(s => s.name.includes(quantSearchQuery));
+  if (activeQuantFilter === 'BREAKOUTS') filtered = filtered.filter(s => s.isAbove);
+  else if (activeQuantFilter === 'MULTI') filtered = filtered.filter(s => s.crossCount >= 2);
+  else if (activeQuantFilter === 'INDICES') filtered = filtered.filter(s => s.isIndex);
+  else if (activeQuantFilter === 'MCX') filtered = filtered.filter(s => s.isCommodity);
+
+  // Sorting
+  if (activeRuleChart === 'RULE_DIVERGING') {
+    filtered.sort((a, b) => b.pctMove - a.pctMove || b.maxPeakPct - a.maxPeakPct);
+  } else if (activeRuleChart === 'RULE_MULTI_CROSS') {
+    filtered.sort((a, b) => b.crossCount - a.crossCount || b.maxPeakPct - a.maxPeakPct);
+  } else if (activeRuleChart === 'RULE_SKEW') {
+    filtered.sort((a, b) => Math.abs(b.cePct - 50) - Math.abs(a.cePct - 50));
+  } else if (activeRuleChart === 'RULE_STALKING') {
+    filtered = filtered.filter(s => !s.isAbove && s.distToPdh > 0 && s.distToPdh <= 3.5);
+    filtered.sort((a, b) => a.distToPdh - b.distToPdh);
+  } else if (activeRuleChart === 'RULE_BARBELL') {
+    filtered.sort((a, b) => b.maxPeakPct - a.maxPeakPct);
+  }
+
+  const displayList = filtered.slice(0, 40);
+  const maxVal = Math.max(15, ...displayList.map(s => Math.abs(s.pctMove)), ...displayList.map(s => s.maxPeakPct));
+
+  if (displayList.length === 0) {
+    container.innerHTML = '<div style="text-align:center; padding: 3rem; color: var(--bb-text-muted);">No assets match this rule filter right now.</div>';
+    return;
+  }
+
+  container.innerHTML = displayList.map((s, idx) => {
+    const rank = idx + 1;
+    const rankClass = rank === 1 ? 'rank-1' : (rank === 2 ? 'rank-2' : (rank === 3 ? 'rank-3' : ''));
+    const isPos = s.pctMove >= 0;
+
+    let centerHtml = '';
+    let rightHtml = '';
+
+    if (activeRuleChart === 'RULE_DIVERGING') {
+      const barWidthPct = Math.min(48, (Math.abs(s.pctMove) / maxVal) * 48);
+      const peakPosPct = 50 + Math.min(48, (s.maxPeakPct / maxVal) * 48);
+      centerHtml = `
+        <div class="diverging-track">
+          <div class="zero-divider-line"></div>
+          ${isPos ? `<div class="bar-gainer" style="width: ${barWidthPct}%;"></div>` : `<div class="bar-loser" style="width: ${barWidthPct}%;"></div>`}
+          ${s.maxPeakPct > 0 ? `<div class="peak-spike-pin" style="left: ${peakPosPct}%;"></div>` : ''}
+        </div>`;
+      rightHtml = `
+        <span class="mono" style="font-weight:800; font-size:0.92rem; color:${isPos ? 'var(--bb-green)' : '#FF5252'};">
+          ${isPos ? '+' : ''}${s.pctMove}%
+        </span>
+        ${s.crossCount > 0 ? `<span class="crossover-pill-tag mono" style="font-size:0.65rem; color:var(--bb-amber);">🔥 ${s.crossCount} Hit${s.crossCount > 1 ? 's' : ''} (Pk +${s.maxPeakPct.toFixed(1)}%)</span>` : '<span style="font-size:0.65rem; color:var(--bb-text-muted);">Retraced</span>'}`;
+    } else if (activeRuleChart === 'RULE_MULTI_CROSS') {
+      const barWidth = Math.min(100, Math.max(10, s.crossCount * 25));
+      centerHtml = `
+        <div style="position:relative; height:20px; background:rgba(0,0,0,0.3); border-radius:4px; margin:0 0.5rem; overflow:hidden;">
+          <div style="width:${barWidth}%; height:100%; background:linear-gradient(90deg, #FF6E40, #FFB300); border-radius:4px; display:flex; align-items:center; padding-left:8px; font-size:0.7rem; font-weight:800; color:#000;">
+            ${s.crossCount} PDH Breakout Crosses
+          </div>
+        </div>`;
+      rightHtml = `
+        <span class="mono" style="font-weight:900; font-size:0.95rem; color:var(--bb-amber);">🔥 ${s.crossCount} Hits</span>
+        <span class="mono" style="font-size:0.68rem; color:var(--bb-green);">Peak: +${s.maxPeakPct.toFixed(1)}%</span>`;
+    } else if (activeRuleChart === 'RULE_SKEW') {
+      centerHtml = `
+        <div class="skew-track">
+          <div class="skew-ce-bar" style="width: ${s.cePct}%;">CE ${s.cePct}%</div>
+          <div class="skew-pe-bar" style="width: ${s.pePct}%;">PE ${s.pePct}%</div>
+        </div>`;
+      const bias = s.cePct > 55 ? 'BULL SKEW' : (s.pePct > 55 ? 'BEAR SKEW' : 'GAMMA EXP');
+      const biasCol = s.cePct > 55 ? 'var(--bb-green)' : (s.pePct > 55 ? '#FF5252' : 'var(--bb-amber)');
+      rightHtml = `
+        <span class="mono" style="font-weight:800; font-size:0.85rem; color:${biasCol};">${bias}</span>
+        <span class="mono" style="font-size:0.68rem; color:var(--bb-text-muted);">CE ₹${s.ceLtp} | PE ₹${s.peLtp}</span>`;
+    } else if (activeRuleChart === 'RULE_STALKING') {
+      const proximityWidth = Math.max(5, 100 - (s.distToPdh * 25));
+      centerHtml = `
+        <div style="position:relative; height:20px; background:rgba(0,0,0,0.3); border-radius:4px; margin:0 0.5rem; overflow:hidden;">
+          <div style="width:${proximityWidth}%; height:100%; background:linear-gradient(90deg, #FFB300, #00E676); border-radius:4px; display:flex; align-items:center; padding-left:8px; font-size:0.7rem; font-weight:800; color:#000;">
+            ${s.distToPdh}% to Trigger
+          </div>
+        </div>`;
+      rightHtml = `
+        <span class="mono" style="font-weight:900; font-size:0.92rem; color:var(--bb-amber);">- ${s.distToPdh}%</span>
+        <span class="mono" style="font-size:0.68rem; color:var(--bb-text-muted);">Str: ₹${s.straddlePrice} / PDH: ₹${s.pdh}</span>`;
+    } else if (activeRuleChart === 'RULE_BARBELL') {
+      const livePct = 30 + Math.min(65, s.pctMove * 3);
+      const peakPct = Math.min(95, livePct + (s.maxPeakPct * 2));
+      centerHtml = `
+        <div class="barbell-track">
+          <div class="barbell-line"></div>
+          <div class="barbell-spread-fill" style="left: 10%; width: ${peakPct - 10}%;"></div>
+          <div class="barbell-dot-min" style="left: 10%;" title="Session Low"></div>
+          <div class="barbell-badge-live mono" style="left: ${livePct}%;">₹${s.straddlePrice}</div>
+          <div class="barbell-dot-max" style="left: ${peakPct}%;" title="Peak Spike: ₹${s.maxPeakPrice}"></div>
+        </div>`;
+      rightHtml = `
+        <span class="mono" style="font-weight:800; font-size:0.88rem; color:var(--bb-green);">+${s.maxPeakPct.toFixed(1)}% Peak</span>
+        <span class="mono" style="font-size:0.68rem; color:var(--bb-text-muted);">Live: ₹${s.straddlePrice}</span>`;
+    }
+
+    return `
+      <div class="table-row-item ${rankClass}">
+        <div class="mono" style="font-weight:800; font-size:0.8rem; color:var(--bb-text-muted);">#${rank}</div>
+
+        <div style="display:flex; flex-direction:column;">
+          <div style="font-size:0.88rem; font-weight:800; display:flex; align-items:center; gap:0.4rem;">
+            <span>${s.name}</span>
+            ${s.isIndex ? '<span class="tag-chip tag-idx">IDX</span>' : (s.isCommodity ? '<span class="tag-chip tag-mcx">MCX</span>' : '')}
+          </div>
+          <div class="mono" style="font-size:0.72rem; color:var(--bb-text-muted);">₹${s.straddlePrice} / ₹${s.pdh}</div>
+        </div>
+
+        ${centerHtml}
+
+        <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end;">
+          ${rightHtml}
+        </div>
+
+        <div style="text-align:center;">
+          <button class="btn-preview-action" onclick="openPreviewModal('${s.name}')" title="Full-View Interactive Candlestick Chart & Event Log">
+            <span>🔍</span> PREVIEW
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderQuantBloombergCanvas() {
+  const ctx = document.getElementById('quantBloombergCanvas');
+  if (!ctx) return;
+
+  const rawMap = lastSymbolsMap || {};
+  let list = Object.values(rawMap).map(s => {
+    const pdh = s.prevDayHighStraddle || s.prevCloseStraddle || s.prevBarClose || 0;
+    const events = s.crossoverEvents || [];
+    const crossCount = events.length;
+    const isAbove = (s.straddlePrice > pdh && pdh > 0) || Boolean(s.breakout);
+    const pctMove = pdh > 0 ? parseFloat((((s.straddlePrice - pdh) / pdh) * 100).toFixed(2)) : 0;
+    let maxPeakPct = 0;
+    if (crossCount > 0) {
+      const pcts = events.map(e => Number(e.peakPct) || (((Number(e.peakPrice) - pdh) / pdh) * 100));
+      maxPeakPct = Math.max(...pcts);
+    }
+    if (!isFinite(maxPeakPct) || maxPeakPct <= 0) maxPeakPct = pctMove > 0 ? pctMove : 0;
+
+    return {
+      ...s,
+      pdh,
+      crossCount,
+      isAbove,
+      pctMove,
+      maxPeakPct,
+      isCommodity: s.segment === 'MCX_COMM' || ['CRUDEOIL', 'NATURALGAS', 'GOLD', 'SILVER', 'COPPER'].includes(s.name),
+      isIndex: s.segment === 'IDX_I' || ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'].includes(s.name)
+    };
+  });
+
+  if (quantSearchQuery) list = list.filter(s => s.name.includes(quantSearchQuery));
+  if (activeQuantFilter === 'BREAKOUTS') list = list.filter(s => s.isAbove);
+  else if (activeQuantFilter === 'MULTI') list = list.filter(s => s.crossCount >= 2);
+  else if (activeQuantFilter === 'INDICES') list = list.filter(s => s.isIndex);
+  else if (activeQuantFilter === 'MCX') list = list.filter(s => s.isCommodity);
+
+  list.sort((a, b) => b.pctMove - a.pctMove);
+  const topItems = list.slice(0, 22);
+
+  const labels = topItems.map((s, i) => `${i + 1}. ${s.name}`);
+  const dataPoints = topItems.map(s => s.pctMove);
+  const peakPoints = topItems.map(s => s.maxPeakPct);
+  const bgColors = dataPoints.map(v => v >= 0 ? '#00E676' : '#FF3D57');
+
+  if (quantBloombergChartInstance) quantBloombergChartInstance.destroy();
+
+  quantBloombergChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Live % Move from PDH',
+          data: dataPoints,
+          backgroundColor: bgColors,
+          borderRadius: 4,
+          barThickness: 16
+        },
+        {
+          label: 'Intraday Peak Spike %',
+          data: peakPoints,
+          backgroundColor: '#FFD700',
+          borderRadius: 4,
+          barThickness: 6
+        }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#FFF', font: { weight: 'bold' } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw}%`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255, 255, 255, 0.08)' },
+          ticks: { color: '#94A3B8', callback: (v) => `${v}%` }
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: '#FFF', font: { weight: 'bold', size: 11 } }
+        }
+      }
+    }
+  });
+}
+
 // Start Live Status Polling
 setInterval(fetchStatus, 2000);
+
 

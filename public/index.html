@@ -62,6 +62,9 @@
     <button class="tab-btn" onclick="switchTab('radar')" id="tabBtnRadar">
       <span class="key-code">[ F4 ]</span> 🚀 BREAKOUT RADAR &amp; ALPHA LEADERBOARD <span class="badge-count" id="radarBadgeCount" style="background: var(--bb-green); color: #000;">0</span>
     </button>
+    <button class="tab-btn" onclick="switchTab('charts')" id="tabBtnCharts">
+      <span class="key-code">[ F5 ]</span> 📊 QUANT STRATEGY CHARTS &amp; MULTI-RULE SUITE
+    </button>
   </nav>
 
   <!-- Main Workspace -->
@@ -419,6 +422,137 @@
       <!-- Leaderboard Cards Grid (Symbol-wise with Avatars, Podiums & Smooth Animations) -->
       <div class="grid-2" id="radarContainer">
         <!-- Rendered dynamically by renderRadarLeaderboard() -->
+      </div>
+
+    </div>
+
+    <!-- TAB 5: 📊 QUANT STRATEGY CHARTS & MULTI-RULE STUDIO -->
+    <div id="tab-charts" class="tab-content">
+      
+      <!-- Top Strategy Rule Navigation -->
+      <nav class="rule-nav">
+        <button class="rule-tab-btn active" onclick="setRuleChart('RULE_DIVERGING')" id="btnRuleDiverging">
+          <span>📊</span> 1. PDH Diverging Barometer <span class="rule-badge">NDTV Style</span>
+        </button>
+        <button class="rule-tab-btn" onclick="setRuleChart('RULE_MULTI_CROSS')" id="btnRuleMulti">
+          <span>🔥</span> 2. Multi-Hit Institutional Squeeze <span class="rule-badge">Retests</span>
+        </button>
+        <button class="rule-tab-btn" onclick="setRuleChart('RULE_SKEW')" id="btnRuleSkew">
+          <span>⚖️</span> 3. Call vs Put Skew Dominance <span class="rule-badge">CE/PE Bias</span>
+        </button>
+        <button class="rule-tab-btn" onclick="setRuleChart('RULE_STALKING')" id="btnRuleStalking">
+          <span>🎯</span> 4. Near-Breakout Radar <span class="rule-badge">Within 2%</span>
+        </button>
+        <button class="rule-tab-btn" onclick="setRuleChart('RULE_BLOOMBERG')" id="btnRuleBloomberg">
+          <span>📈</span> 5. Bloomberg Comparative Rank <span class="rule-badge">Top Alpha</span>
+        </button>
+        <button class="rule-tab-btn" onclick="setRuleChart('RULE_BARBELL')" id="btnRuleBarbell">
+          <span>🏷️</span> 6. Day Range &amp; Peak Barbell <span class="rule-badge">Spread</span>
+        </button>
+      </nav>
+
+      <!-- Main Strategy Grid -->
+      <div class="chart-strategy-grid">
+        
+        <!-- Left Table / Canvas Area -->
+        <div class="bb-panel" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+          
+          <!-- Filter Controls -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; border-bottom: 1px solid var(--bb-panel-border); padding-bottom: 0.85rem;">
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <button class="filter-pill active" onclick="setQuantFilter('ALL')" id="qfAll">ALL ASSETS (230)</button>
+              <button class="filter-pill" onclick="setQuantFilter('BREAKOUTS')" id="qfBreakouts">⚡ BREAKOUTS (&gt;PDH)</button>
+              <button class="filter-pill" onclick="setQuantFilter('MULTI')" id="qfMulti">🔥 MULTI-CROSS (2+)</button>
+              <button class="filter-pill" onclick="setQuantFilter('INDICES')" id="qfIndices">🏛️ INDICES</button>
+              <button class="filter-pill" onclick="setQuantFilter('MCX')" id="qfMCX">🛢️ COMMODITIES</button>
+            </div>
+
+            <input type="text" id="quantSearchInput" placeholder="🔍 Quick filter ticker..." oninput="onQuantSearchInput()" style="background: #0B0F19; border: 1px solid var(--bb-panel-border); border-radius: 4px; padding: 0.35rem 0.75rem; color: #FFF; font-size: 0.8rem; outline: none; min-width: 200px;">
+          </div>
+
+          <!-- Strategy Rule Description Banner -->
+          <div style="background: #0C101A; border: 1px solid var(--bb-panel-border); padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center;" id="ruleBanner">
+            <span id="ruleBannerText"><b>Rule 1:</b> Diverging Breakout Barometer (Green &gt; PDH, Red &lt; PDH)</span>
+            <span class="mono" style="color: var(--bb-amber);" id="ruleBannerStats">Tracking 230 symbols</span>
+          </div>
+
+          <!-- Table Header -->
+          <div id="quantTableHeaderWrap" class="ndtv-header-row">
+            <div>#</div>
+            <div>ASSET TICKER</div>
+            <div id="quantColCenterTitle">
+              <div class="axis-ticks-container">
+                <span class="axis-tick">-15%</span>
+                <span class="axis-tick">-10%</span>
+                <span class="axis-tick">-5%</span>
+                <span class="axis-tick" style="color: #FFF; font-weight: 900;">0.0% PDH</span>
+                <span class="axis-tick">+5%</span>
+                <span class="axis-tick">+10%</span>
+                <span class="axis-tick">+15%</span>
+              </div>
+            </div>
+            <div style="text-align: right;" id="quantColRightTitle">MOVE VS PDH</div>
+            <div style="text-align: center;">CHART</div>
+          </div>
+
+          <!-- Table Rows Scroll Wrap -->
+          <div class="rows-scroll-wrap" id="quantRowsContainer">
+            <!-- Dynamically populated -->
+          </div>
+
+          <!-- Bloomberg Canvas Wrap -->
+          <div id="quantChartJsWrap" style="display: none; height: 700px; position: relative;">
+            <canvas id="quantBloombergCanvas"></canvas>
+          </div>
+
+        </div>
+
+        <!-- Right Side Intelligence Panel -->
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          
+          <div class="stat-card" style="border-left-color: var(--bb-green);">
+            <div class="stat-label">🥇 Today's Alpha Champion</div>
+            <div style="font-size: 1.3rem; font-weight: 900; color: var(--bb-green); margin-top: 0.25rem;" id="qSideChampName">--</div>
+            <div style="font-size: 0.85rem; font-weight: 800; color: var(--bb-green);" id="qSideChampPct">+0.00%</div>
+            <div class="stat-sub" id="qSideChampDetail">Live Straddle vs PDH</div>
+          </div>
+
+          <div class="stat-card" style="border-left-color: #FF6E40;">
+            <div class="stat-label">🔥 Institutional Multi-Cross</div>
+            <div style="font-size: 1.3rem; font-weight: 900; color: #FF6E40; margin-top: 0.25rem;" id="qSideMultiName">--</div>
+            <div style="font-size: 0.85rem; font-weight: 800; color: var(--bb-amber);" id="qSideMultiHits">0 Hits</div>
+            <div class="stat-sub" id="qSideMultiDetail">Consecutive Breakout Level Tests</div>
+          </div>
+
+          <div class="stat-card" style="border-left-color: var(--bb-cyan);">
+            <div class="stat-label">📊 Straddle Market Breadth</div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; padding: 0.35rem 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
+              <span>Above PDH (Bullish):</span>
+              <b style="color: var(--bb-green);" id="qSideAboveCount">0</b>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; padding: 0.35rem 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
+              <span>Below PDH:</span>
+              <b style="color: #FF5252;" id="qSideBelowCount">0</b>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; padding: 0.35rem 0;">
+              <span>Multi-Cross (2+):</span>
+              <b style="color: var(--bb-amber);" id="qSideMultiCount">0</b>
+            </div>
+          </div>
+
+          <div class="bb-panel" style="padding: 1rem;">
+            <div style="font-size: 0.75rem; font-weight: 800; color: var(--bb-text-muted); text-transform: uppercase; margin-bottom: 0.5rem;" id="qRuleLegendTitle">💡 Rule Details</div>
+            <div style="font-size: 0.78rem; color: var(--bb-text-muted); line-height: 1.6;" id="qRuleLegendBody">
+              • <b>Center Axis (0.0%):</b> Exact Previous Day High (PDH) strike barrier.<br>
+              • <b>Green Bar:</b> Active breakout above PDH.<br>
+              • <b>Red Bar:</b> Retracement below PDH.<br>
+              • <b>Gold Pin (▮):</b> Intraday peak breakout milestone reached today.<br>
+              • <b>🔍 Preview Button:</b> Click to open high-res chart &amp; crossover history.
+            </div>
+          </div>
+
+        </div>
+
       </div>
 
     </div>

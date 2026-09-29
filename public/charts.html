@@ -1,0 +1,1557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alpha Quantitative Strategy Charts & Breakout Matrix — Dhan Bloomberg Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-base: #06090E;
+      --bg-surface: #0D1524;
+      --bg-card: #111C30;
+      --bg-card-hover: #172642;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+      
+      --green-up: #00E676;
+      --green-glow: rgba(0, 230, 118, 0.25);
+      --green-bar: #00C853;
+      
+      --red-down: #FF3D57;
+      --red-glow: rgba(255, 61, 87, 0.25);
+      --red-bar: #D50000;
+      
+      --amber-accent: #FFB300;
+      --cyan-accent: #00E5FF;
+      --gold-peak: #FFD700;
+      --idx-purple: #C084FC;
+    }
+
+    [data-theme="light"] {
+      --bg-base: #F1F5F9;
+      --bg-surface: #FFFFFF;
+      --bg-card: #F8FAFC;
+      --bg-card-hover: #EEF2F6;
+      --border-subtle: #E2E8F0;
+      --border-strong: #CBD5E1;
+      
+      --text-main: #0F172A;
+      --text-muted: #475569;
+      --text-dim: #64748B;
+      
+      --green-up: #059669;
+      --green-glow: rgba(5, 150, 105, 0.15);
+      --green-bar: #00C853;
+      
+      --red-down: #DC2626;
+      --red-glow: rgba(220, 38, 38, 0.15);
+      --red-bar: #E53935;
+      
+      --amber-accent: #D97706;
+      --cyan-accent: #0284C7;
+      --gold-peak: #B45309;
+      --idx-purple: #7E22CE;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 1.25rem;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .app-shell {
+      max-width: 1560px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    /* Top Master Header */
+    .top-header {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .brand-logo {
+      background: linear-gradient(135deg, #FFB300, #FF6D00);
+      color: #000;
+      font-weight: 900;
+      font-size: 1.1rem;
+      padding: 0.4rem 0.75rem;
+      border-radius: 8px;
+    }
+
+    .brand-title {
+      font-size: 1.25rem;
+      font-weight: 900;
+      letter-spacing: -0.3px;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .brand-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* Chart Rule Navigation Tabs */
+    .rule-nav {
+      display: flex;
+      gap: 0.5rem;
+      overflow-x: auto;
+      padding-bottom: 0.25rem;
+    }
+
+    .rule-tab-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 0.65rem 1.1rem;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .rule-tab-btn:hover {
+      border-color: var(--border-strong);
+      color: var(--text-main);
+      background: var(--bg-card);
+    }
+
+    .rule-tab-btn.active {
+      background: var(--bg-card);
+      border-color: var(--amber-accent);
+      color: var(--text-main);
+      box-shadow: 0 0 15px rgba(255, 179, 0, 0.15);
+    }
+
+    .rule-badge {
+      font-size: 0.65rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-weight: 800;
+      background: var(--border-strong);
+      color: var(--text-main);
+    }
+
+    .rule-tab-btn.active .rule-badge {
+      background: var(--amber-accent);
+      color: #000;
+    }
+
+    /* Top Metrics Ribbon */
+    .metrics-ribbon {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+    }
+
+    @media (max-width: 900px) {
+      .metrics-ribbon {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .metric-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      position: relative;
+    }
+
+    .metric-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--card-accent, var(--amber-accent));
+    }
+
+    .metric-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 0.35rem;
+    }
+
+    .metric-value {
+      font-size: 1.6rem;
+      font-weight: 900;
+      color: var(--text-main);
+    }
+
+    .metric-sub {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-top: 0.25rem;
+    }
+
+    /* Workspace Layout */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 1.25rem;
+    }
+
+    @media (max-width: 1200px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .workspace-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      min-height: 750px;
+    }
+
+    /* Filter Bar */
+    .filter-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 0.85rem;
+    }
+
+    .filter-group {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+
+    .filter-pill {
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 0.35rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .filter-pill.active {
+      background: var(--green-up);
+      color: #000;
+      border-color: var(--green-up);
+      font-weight: 800;
+    }
+
+    .search-box {
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 0.35rem 0.75rem;
+      color: var(--text-main);
+      font-size: 0.8rem;
+      outline: none;
+      min-width: 220px;
+    }
+
+    /* Chart Table Layout */
+    .ndtv-header-row {
+      display: grid;
+      grid-template-columns: 36px 160px 1fr 125px 95px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.7rem;
+      font-weight: 800;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border-strong);
+    }
+
+    .axis-ticks-container {
+      display: flex;
+      justify-content: space-between;
+      padding: 0 4px;
+      margin: 0 0.5rem;
+    }
+
+    .axis-tick {
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      font-weight: 700;
+    }
+
+    .rows-scroll-wrap {
+      max-height: 720px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding-right: 0.35rem;
+    }
+
+    .table-row-item {
+      display: grid;
+      grid-template-columns: 36px 160px 1fr 125px 95px;
+      align-items: center;
+      padding: 0.45rem 0.75rem;
+      background: var(--bg-card);
+      border: 1px solid transparent;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .table-row-item:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-strong);
+      transform: translateX(2px);
+    }
+
+    .table-row-item.rank-1 { border-left: 3px solid #FFD700; }
+    .table-row-item.rank-2 { border-left: 3px solid #E2E8F0; }
+    .table-row-item.rank-3 { border-left: 3px solid #CD7F32; }
+
+    .diverging-track {
+      position: relative;
+      height: 22px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 4px;
+      margin: 0 0.5rem;
+      display: flex;
+      align-items: center;
+    }
+
+    .zero-divider-line {
+      position: absolute;
+      left: 50%;
+      top: -3px;
+      bottom: -3px;
+      width: 2px;
+      background: rgba(255, 255, 255, 0.4);
+      z-index: 5;
+    }
+
+    .bar-gainer {
+      position: absolute;
+      left: 50%;
+      top: 2px;
+      bottom: 2px;
+      background: linear-gradient(90deg, #00C853, #00E676);
+      border-radius: 0 3px 3px 0;
+      z-index: 3;
+      box-shadow: 0 0 10px rgba(0, 230, 118, 0.3);
+    }
+
+    .bar-loser {
+      position: absolute;
+      right: 50%;
+      top: 2px;
+      bottom: 2px;
+      background: linear-gradient(270deg, #D50000, #FF1744);
+      border-radius: 3px 0 0 3px;
+      z-index: 3;
+      box-shadow: 0 0 10px rgba(255, 23, 68, 0.3);
+    }
+
+    .peak-spike-pin {
+      position: absolute;
+      top: -2px;
+      bottom: -2px;
+      width: 3px;
+      background: var(--gold-peak);
+      border-radius: 2px;
+      z-index: 6;
+      box-shadow: 0 0 8px var(--gold-peak);
+    }
+
+    /* Skew / CE vs PE Leg Dominance Bar */
+    .skew-track {
+      position: relative;
+      height: 22px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 4px;
+      margin: 0 0.5rem;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .skew-ce-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #00C853, #00E676);
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      padding-left: 6px;
+      font-size: 0.65rem;
+      font-weight: 800;
+      color: #000;
+    }
+
+    .skew-pe-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #FF1744, #D50000);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 6px;
+      font-size: 0.65rem;
+      font-weight: 800;
+      color: #FFF;
+    }
+
+    /* Barbell Track */
+    .barbell-track {
+      position: relative;
+      height: 22px;
+      margin: 0 0.5rem;
+      display: flex;
+      align-items: center;
+    }
+
+    .barbell-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .barbell-spread-fill {
+      position: absolute;
+      height: 4px;
+      background: var(--cyan-accent);
+      border-radius: 2px;
+    }
+
+    .barbell-dot-min, .barbell-dot-max {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      top: 7px;
+      transform: translateX(-50%);
+    }
+
+    .barbell-dot-min { background: #FF5252; }
+    .barbell-dot-max { background: var(--gold-peak); box-shadow: 0 0 6px var(--gold-peak); }
+
+    .barbell-badge-live {
+      position: absolute;
+      top: 2px;
+      transform: translateX(-50%);
+      background: var(--green-up);
+      color: #000;
+      font-size: 0.65rem;
+      font-weight: 900;
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+      z-index: 5;
+    }
+
+    /* Preview Action Button */
+    .btn-preview-action {
+      background: rgba(0, 229, 255, 0.12);
+      border: 1px solid rgba(0, 229, 255, 0.35);
+      color: var(--cyan-accent);
+      font-size: 0.72rem;
+      font-weight: 800;
+      padding: 0.35rem 0.65rem;
+      border-radius: 5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      transition: all 0.15s;
+    }
+
+    .btn-preview-action:hover {
+      background: var(--cyan-accent);
+      color: #000;
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+    }
+
+    /* Tag Chips */
+    .tag-chip {
+      font-size: 0.62rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+      font-weight: 800;
+    }
+
+    .tag-idx {
+      background: rgba(192, 132, 252, 0.15);
+      color: var(--idx-purple);
+      border: 1px solid rgba(192, 132, 252, 0.3);
+    }
+
+    .tag-mcx {
+      background: rgba(0, 229, 255, 0.15);
+      color: var(--cyan-accent);
+      border: 1px solid rgba(0, 229, 255, 0.3);
+    }
+
+    /* Sidebar */
+    .sidebar-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .intel-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 1.25rem;
+    }
+
+    .intel-title {
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
+    .champion-box {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
+    .champ-medal { font-size: 1.75rem; }
+    .champ-name { font-size: 1.15rem; font-weight: 900; }
+    .champ-pct { font-size: 0.95rem; font-weight: 800; color: var(--green-up); }
+    .champ-detail { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.2rem; }
+
+    .breadth-meter-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    /* Full-View Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(4, 7, 13, 0.85);
+      backdrop-filter: blur(10px);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-dialog {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      max-width: 1100px;
+      width: 100%;
+      max-height: 92vh;
+      overflow-y: auto;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      animation: modalSlideIn 0.2s ease-out;
+    }
+
+    @keyframes modalSlideIn {
+      from { transform: translateY(20px) scale(0.98); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+
+    .modal-head {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-card);
+    }
+
+    .modal-close-btn {
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close-btn:hover {
+      border-color: var(--red-down);
+      color: var(--red-down);
+    }
+
+    .modal-body {
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .modal-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.75rem;
+    }
+
+    @media (max-width: 800px) {
+      .modal-stat-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .modal-stat-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+    }
+
+    .modal-stat-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 0.25rem;
+    }
+
+    .modal-stat-val {
+      font-size: 1.35rem;
+      font-weight: 900;
+    }
+
+    .crossover-history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+
+    .crossover-history-table th {
+      background: var(--bg-card);
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      font-weight: 800;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .crossover-history-table td {
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+
+    <!-- Header -->
+    <header class="top-header">
+      <div class="brand-group">
+        <div class="brand-logo">ALPHA</div>
+        <div>
+          <div class="brand-title">
+            <span>QUANT STRATEGY CHARTS &amp; BREAKOUT SUITE</span>
+            <span style="font-size: 0.7rem; background: var(--green-glow); color: var(--green-up); padding: 0.15rem 0.5rem; border-radius: 4px; border: 1px solid var(--green-up);">LIVE STREAM</span>
+          </div>
+          <div class="brand-subtitle">Real-time Institutional Straddle Strategies, Divergence Barometers &amp; Leg Skew Analysis</div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <button class="rule-tab-btn" onclick="toggleTheme()" title="Dark / Light Studio Mode">🌓 Mode</button>
+        <a href="/" style="background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text-main); padding: 0.45rem 0.85rem; border-radius: 8px; text-decoration: none; font-size: 0.8rem; font-weight: 700;">
+          ← Main Bloomberg Dashboard
+        </a>
+      </div>
+    </header>
+
+    <!-- Strategy Rule Tabs (6 Interactive Visual Systems) -->
+    <nav class="rule-nav">
+      <button class="rule-tab-btn active" onclick="setRuleChart('RULE_DIVERGING')" id="btnRuleDiverging">
+        <span>📊</span> 1. PDH Diverging Barometer <span class="rule-badge">NDTV Style</span>
+      </button>
+
+      <button class="rule-tab-btn" onclick="setRuleChart('RULE_MULTI_CROSS')" id="btnRuleMulti">
+        <span>🔥</span> 2. Multi-Hit Institutional Squeeze <span class="rule-badge">Retests</span>
+      </button>
+
+      <button class="rule-tab-btn" onclick="setRuleChart('RULE_SKEW')" id="btnRuleSkew">
+        <span>⚖️</span> 3. Call vs Put Skew Dominance <span class="rule-badge">CE/PE Bias</span>
+      </button>
+
+      <button class="rule-tab-btn" onclick="setRuleChart('RULE_STALKING')" id="btnRuleStalking">
+        <span>🎯</span> 4. Near-Breakout Radar <span class="rule-badge">Within 2%</span>
+      </button>
+
+      <button class="rule-tab-btn" onclick="setRuleChart('RULE_BLOOMBERG')" id="btnRuleBloomberg">
+        <span>📈</span> 5. Bloomberg Comparative Rank <span class="rule-badge">Top Alpha</span>
+      </button>
+
+      <button class="rule-tab-btn" onclick="setRuleChart('RULE_BARBELL')" id="btnRuleBarbell">
+        <span>🏷️</span> 6. Day Range &amp; Peak Barbell <span class="rule-badge">Spread</span>
+      </button>
+    </nav>
+
+    <!-- Top Metrics Ribbon -->
+    <section class="metrics-ribbon">
+      <div class="metric-card" style="--card-accent: var(--green-up);">
+        <div class="metric-label">⚡ Active PDH Breakouts</div>
+        <div class="metric-value mono" style="color: var(--green-up);" id="mActiveBreakouts">0</div>
+        <div class="metric-sub">Trading strictly above Previous Day High</div>
+      </div>
+
+      <div class="metric-card" style="--card-accent: #FF6E40;">
+        <div class="metric-label">🔥 Multi-Crossover Leaders</div>
+        <div class="metric-value mono" style="color: #FF6E40;" id="mMultiCross">0</div>
+        <div class="metric-sub">Institutions crossing PDH 2+ times</div>
+      </div>
+
+      <div class="metric-card" style="--card-accent: var(--cyan-accent);">
+        <div class="metric-label">🚀 Top Alpha Peak Leader</div>
+        <div class="metric-value" style="font-size: 1.35rem; color: var(--cyan-accent);" id="mTopPeakSym">--</div>
+        <div class="metric-sub" id="mTopPeakSub">Highest intraday percentage gain</div>
+      </div>
+
+      <div class="metric-card" style="--card-accent: var(--amber-accent);">
+        <div class="metric-label">🏛️ Total Universe Monitored</div>
+        <div class="metric-value mono" id="mTotalUniverse">230</div>
+        <div class="metric-sub">217 F&amp;O • 4 Indices • 9 MCX</div>
+      </div>
+    </section>
+
+    <!-- Workspace -->
+    <div class="main-grid">
+      
+      <main class="workspace-panel">
+        
+        <!-- Filter Controls -->
+        <div class="filter-bar">
+          <div class="filter-group">
+            <button class="filter-pill active" onclick="setFilter('ALL')" id="fAll">ALL ASSETS (230)</button>
+            <button class="filter-pill" onclick="setFilter('BREAKOUTS')" id="fBreakouts">⚡ BREAKOUTS (&gt;PDH)</button>
+            <button class="filter-pill" onclick="setFilter('MULTI')" id="fMulti">🔥 MULTI-CROSS (2+)</button>
+            <button class="filter-pill" onclick="setFilter('INDICES')" id="fIndices">🏛️ INDICES</button>
+            <button class="filter-pill" onclick="setFilter('MCX')" id="fMCX">🛢️ COMMODITIES</button>
+          </div>
+
+          <input type="text" class="search-box" id="barometerSearch" placeholder="🔍 Quick filter ticker..." oninput="onSearchInput()">
+        </div>
+
+        <!-- Strategy Rule Description Banner -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center;" id="ruleBanner">
+          <span id="ruleBannerText"><b>Rule 1:</b> Diverging Breakout Barometer (Green &gt; PDH, Red &lt; PDH)</span>
+          <span class="mono" style="color: var(--amber-accent);" id="ruleBannerStats">Tracking 230 symbols</span>
+        </div>
+
+        <!-- Dynamic Chart View Canvas or Table -->
+        <div class="chart-view-section">
+          
+          <div id="tableHeaderWrap" class="ndtv-header-row">
+            <div>#</div>
+            <div>ASSET TICKER</div>
+            <div id="columnCenterTitle">
+              <div class="axis-ticks-container mono">
+                <span class="axis-tick">-15%</span>
+                <span class="axis-tick">-10%</span>
+                <span class="axis-tick">-5%</span>
+                <span class="axis-tick" style="color: var(--text-main); font-weight: 900;">0.0% PDH</span>
+                <span class="axis-tick">+5%</span>
+                <span class="axis-tick">+10%</span>
+                <span class="axis-tick">+15%</span>
+              </div>
+            </div>
+            <div style="text-align: right;" id="columnRightTitle">MOVE VS PDH</div>
+            <div style="text-align: center;">CHART</div>
+          </div>
+
+          <div class="rows-scroll-wrap" id="rowsContainer">
+            <!-- Dynamic rows populated here -->
+          </div>
+
+          <!-- Chart.js Viewport (for Bloomberg Rank View) -->
+          <div id="chartJsWrap" style="display: none; height: 700px;">
+            <canvas id="bloombergCanvas"></canvas>
+          </div>
+
+        </div>
+
+      </main>
+
+      <!-- Intelligence Sidebar -->
+      <aside class="sidebar-panel">
+        
+        <div class="intel-card" style="border-left: 4px solid var(--green-up);">
+          <div class="intel-title">🥇 Today's Alpha Champion</div>
+          <div class="champion-box">
+            <div class="champ-medal">🏆</div>
+            <div>
+              <div class="champ-name" id="sideChampName">--</div>
+              <div class="champ-pct mono" id="sideChampPct">+0.00%</div>
+              <div class="champ-detail" id="sideChampDetail">Live Straddle vs PDH</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="intel-card" style="border-left: 4px solid #FF6E40;">
+          <div class="intel-title">🔥 Institutional Multi-Cross</div>
+          <div class="champion-box">
+            <div class="champ-medal">⚡</div>
+            <div>
+              <div class="champ-name" id="sideMultiName">--</div>
+              <div class="champ-pct mono" style="color: #FFB300;" id="sideMultiHits">0 Hits</div>
+              <div class="champ-detail" id="sideMultiDetail">Consecutive Breakout Level Tests</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="intel-card">
+          <div class="intel-title">📊 Straddle Market Breadth</div>
+          <div class="breadth-meter-row">
+            <span>Trading Above PDH (Bullish):</span>
+            <b class="mono" style="color: var(--green-up);" id="sideAboveCount">0</b>
+          </div>
+          <div class="breadth-meter-row">
+            <span>Consolidating Below PDH:</span>
+            <b class="mono" style="color: var(--red-down);" id="sideBelowCount">0</b>
+          </div>
+          <div class="breadth-meter-row">
+            <span>Multi-Cross Active (2+):</span>
+            <b class="mono" style="color: var(--amber-accent);" id="sideMultiCount">0</b>
+          </div>
+        </div>
+
+        <div class="intel-card">
+          <div class="intel-title" id="ruleLegendTitle">💡 Rule Details</div>
+          <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.6;" id="ruleLegendBody">
+            • <b>Zero Axis (0.0%):</b> Exact Previous Day High (PDH) level.<br>
+            • <b>Green Bar:</b> Live Straddle trading above PDH.<br>
+            • <b>Red Bar:</b> Retracing Straddle trading below PDH.<br>
+            • <b>Gold Pin (▮):</b> Peak intraday breakout spike reached today.<br>
+            • <b>🔍 Preview Button:</b> Click to open high-res candlestick chart &amp; crossover history.
+          </div>
+        </div>
+
+      </aside>
+
+    </div>
+
+  </div>
+
+  <!-- FULL-VIEW HIGH RESOLUTION MODAL -->
+  <div class="modal-overlay" id="previewModal" onclick="if(event.target === this) closePreviewModal()">
+    <div class="modal-dialog">
+      
+      <div class="modal-head">
+        <div>
+          <div style="font-size: 1.2rem; font-weight: 900; display: flex; align-items: center; gap: 0.6rem;">
+            <span id="modalTitle">RELIANCE STRADDLE OVERVIEW</span>
+            <span id="modalSourceBadge" style="font-size: 0.68rem; padding: 0.15rem 0.5rem; border-radius: 4px; font-weight: 800; border: 1px solid var(--green-up); color: var(--green-up);">LIVE DHAN</span>
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-dim);" id="modalSubTitle">ATM Strike &amp; Historical Breakout Performance</div>
+        </div>
+
+        <button class="modal-close-btn" onclick="closePreviewModal()" title="Close (Esc)">✕</button>
+      </div>
+
+      <div class="modal-body">
+        
+        <!-- Metric Grid -->
+        <div class="modal-stat-grid">
+          <div class="modal-stat-box">
+            <div class="modal-stat-label">Live Straddle Price</div>
+            <div class="modal-stat-val mono" style="color: var(--green-up);" id="mValStraddle">₹0.00</div>
+            <div class="mono" style="font-size: 0.72rem; color: var(--text-dim);" id="mValLegs">CE: ₹0.00 | PE: ₹0.00</div>
+          </div>
+
+          <div class="modal-stat-box">
+            <div class="modal-stat-label">Prev Day High (PDH)</div>
+            <div class="modal-stat-val mono" id="mValPdh">₹0.00</div>
+            <div style="font-size: 0.72rem; color: var(--text-dim);">Breakout Trigger Level</div>
+          </div>
+
+          <div class="modal-stat-box">
+            <div class="modal-stat-label">Max Peak Gain Spike</div>
+            <div class="modal-stat-val mono" style="color: var(--gold-peak);" id="mValPeakGain">+0.00%</div>
+            <div class="mono" style="font-size: 0.72rem; color: var(--text-dim);" id="mValPeakPrice">Day High: ₹0.00</div>
+          </div>
+
+          <div class="modal-stat-box">
+            <div class="modal-stat-label">Spot &amp; ATM Strike</div>
+            <div class="modal-stat-val mono" id="mValSpot">₹0.00</div>
+            <div class="mono" style="font-size: 0.72rem; color: var(--text-dim);" id="mValAtm">ATM: --</div>
+          </div>
+        </div>
+
+        <!-- High-Res Intraday Straddle Canvas -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 1rem; height: 320px; position: relative;">
+          <canvas id="modalChartCanvas"></canvas>
+        </div>
+
+        <!-- Chronological Crossover History -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 1.25rem;">
+          <div style="font-size: 0.85rem; font-weight: 800; margin-bottom: 0.75rem; display: flex; justify-content: space-between;">
+            <span>📋 Intraday Breakout &amp; Retest History</span>
+            <span class="mono" style="color: var(--amber-accent);" id="modalCrossoverCount">0 Events</span>
+          </div>
+
+          <table class="crossover-history-table">
+            <thead>
+              <tr>
+                <th>TIME (IST)</th>
+                <th>CROSSOVER TYPE</th>
+                <th>STRADDLE PRICE</th>
+                <th>PEAK REACHED</th>
+                <th>PEAK % GAIN</th>
+                <th>TELEGRAM DISPATCH</th>
+              </tr>
+            </thead>
+            <tbody id="modalCrossoverBody">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    let activeRule = 'RULE_DIVERGING';
+    let activeFilter = 'ALL';
+    let searchQuery = '';
+    let liveSymbols = {};
+    let chartInstance = null;
+    let modalChartInstance = null;
+    let currentModalSymName = null;
+
+    function toggleTheme() {
+      const current = document.body.getAttribute('data-theme');
+      const next = current === 'light' ? 'dark' : 'light';
+      document.body.setAttribute('data-theme', next);
+      if (activeRule === 'RULE_BLOOMBERG') renderBloombergCanvas();
+    }
+
+    function setRuleChart(ruleName) {
+      activeRule = ruleName;
+      document.querySelectorAll('.rule-tab-btn').forEach(btn => btn.classList.remove('active'));
+      const btnMap = {
+        'RULE_DIVERGING': 'btnRuleDiverging',
+        'RULE_MULTI_CROSS': 'btnRuleMulti',
+        'RULE_SKEW': 'btnRuleSkew',
+        'RULE_STALKING': 'btnRuleStalking',
+        'RULE_BLOOMBERG': 'btnRuleBloomberg',
+        'RULE_BARBELL': 'btnRuleBarbell'
+      };
+      if (btnMap[ruleName]) document.getElementById(btnMap[ruleName])?.classList.add('active');
+
+      const tableWrap = document.getElementById('tableHeaderWrap');
+      const rowsWrap = document.getElementById('rowsContainer');
+      const canvasWrap = document.getElementById('chartJsWrap');
+
+      if (ruleName === 'RULE_BLOOMBERG') {
+        tableWrap.style.display = 'none';
+        rowsWrap.style.display = 'none';
+        canvasWrap.style.display = 'block';
+        renderBloombergCanvas();
+      } else {
+        tableWrap.style.display = 'grid';
+        rowsWrap.style.display = 'flex';
+        canvasWrap.style.display = 'none';
+        renderActiveRuleTable();
+      }
+      updateRuleBanner();
+    }
+
+    function updateRuleBanner() {
+      const bText = document.getElementById('ruleBannerText');
+      const lTitle = document.getElementById('ruleLegendTitle');
+      const lBody = document.getElementById('ruleLegendBody');
+      const centerTitle = document.getElementById('columnCenterTitle');
+      const rightTitle = document.getElementById('columnRightTitle');
+
+      if (activeRule === 'RULE_DIVERGING') {
+        bText.innerHTML = '<b>Rule 1 — PDH Diverging Barometer:</b> Measures exact % distance above or below Previous Day High (PDH).';
+        lTitle.textContent = '💡 Rule 1: Breakout Divergence';
+        lBody.innerHTML = '• <b>Green Bars:</b> Active breakouts expanding above PDH.<br>• <b>Red Bars:</b> Consolidating stocks below PDH.<br>• <b>Gold Pin:</b> Day\'s highest peak breakout milestone.';
+        centerTitle.innerHTML = `
+          <div class="axis-ticks-container mono">
+            <span class="axis-tick">-15%</span><span class="axis-tick">-10%</span><span class="axis-tick">-5%</span>
+            <span class="axis-tick" style="color: var(--text-main); font-weight: 900;">0.0% PDH</span>
+            <span class="axis-tick">+5%</span><span class="axis-tick">+10%</span><span class="axis-tick">+15%</span>
+          </div>`;
+        rightTitle.textContent = 'MOVE VS PDH';
+      } else if (activeRule === 'RULE_MULTI_CROSS') {
+        bText.innerHTML = '<b>Rule 2 — Institutional Multi-Hit Squeeze:</b> Ranks assets by frequency of PDH re-tests &amp; breakout velocity.';
+        lTitle.textContent = '💡 Rule 2: Multi-Cross Retests';
+        lBody.innerHTML = '• <b>3+ Crosses (Power Trend):</b> Heavy institutional accumulation.<br>• <b>2 Crosses:</b> Confirmed breakout pullback &amp; retest.<br>• <b>1 Cross:</b> First-mover initial breakout.';
+        centerTitle.innerHTML = '<div style="text-align:center; font-size:0.7rem; color:var(--text-dim);">CROSSOVER FREQUENCY &amp; RESILIENCE SPECTRUM</div>';
+        rightTitle.textContent = 'HITS &amp; PEAK';
+      } else if (activeRule === 'RULE_SKEW') {
+        bText.innerHTML = '<b>Rule 3 — Call vs Put Skew Dominance:</b> Analyzes if Call buyers (CE) or Put buyers (PE) are driving the straddle explosion.';
+        lTitle.textContent = '💡 Rule 3: Skew Directionality';
+        lBody.innerHTML = '• <b>CE &gt; 60% (Green Dominance):</b> Massive Bullish Spot Rally.<br>• <b>PE &gt; 60% (Red Dominance):</b> Spot Market Crash Panic.<br>• <b>45%–55%:</b> Pure Volatility / Gamma Expansion (Both legs inflating).';
+        centerTitle.innerHTML = `
+          <div style="display: flex; justify-content: space-between; font-size: 0.68rem; font-weight: 800;">
+            <span style="color: var(--green-up);">◀ CALL LEG (CE %)</span>
+            <span style="color: var(--text-dim);">ATM BALANCE (50/50)</span>
+            <span style="color: var(--red-down);">PUT LEG (PE %) ▶</span>
+          </div>`;
+        rightTitle.textContent = 'SKEW RATIO';
+      } else if (activeRule === 'RULE_STALKING') {
+        bText.innerHTML = '<b>Rule 4 — Near-Breakout Stalking Radar:</b> Stocks within 0.1% to 3.0% of PDH preparing for immediate breakout.';
+        lTitle.textContent = '💡 Rule 4: Pre-Breakout Stalking';
+        lBody.innerHTML = '• Identifies coiled springs about to punch through PDH.<br>• Allows early positioning before Telegram alert fires.<br>• Sorted by closest proximity to trigger.';
+        centerTitle.innerHTML = '<div style="text-align:center; font-size:0.7rem; color:var(--amber-accent);">DISTANCE TO PDH BREAKOUT (0% TO 3%)</div>';
+        rightTitle.textContent = 'DISTANCE';
+      } else if (activeRule === 'RULE_BARBELL') {
+        bText.innerHTML = '<b>Rule 6 — Day Range &amp; Peak Barbell (PortfolioCharts Style):</b> Shows session low, live straddle price, and peak crossover milestone.';
+        lTitle.textContent = '💡 Rule 6: Barbell Range';
+        lBody.innerHTML = '• <b>Red Dot:</b> Session Low.<br>• <b>Green Pill:</b> Live Price.<br>• <b>Gold Dot:</b> Peak High Milestone above PDH.';
+        centerTitle.innerHTML = '<div style="text-align:center; font-size:0.7rem; color:var(--cyan-accent);">SESSION LOW ──── LIVE STRADDLE ──── DAY PEAK</div>';
+        rightTitle.textContent = 'RANGE SPREAD';
+      }
+    }
+
+    function setFilter(filterType) {
+      activeFilter = filterType;
+      document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+      const map = { 'ALL': 'fAll', 'BREAKOUTS': 'fBreakouts', 'MULTI': 'fMulti', 'INDICES': 'fIndices', 'MCX': 'fMCX' };
+      if (map[filterType]) document.getElementById(map[filterType])?.classList.add('active');
+
+      if (activeRule === 'RULE_BLOOMBERG') renderBloombergCanvas();
+      else renderActiveRuleTable();
+    }
+
+    function onSearchInput() {
+      searchQuery = (document.getElementById('barometerSearch')?.value || '').trim().toUpperCase();
+      if (activeRule === 'RULE_BLOOMBERG') renderBloombergCanvas();
+      else renderActiveRuleTable();
+    }
+
+    function getEnrichedList() {
+      const raw = Object.values(liveSymbols);
+      if (raw.length === 0) return [];
+
+      return raw.map(s => {
+        const pdh = s.prevDayHighStraddle || s.prevCloseStraddle || s.prevBarClose || 0;
+        const events = s.crossoverEvents || [];
+        const crossCount = events.length;
+        const isAbove = (s.straddlePrice > pdh && pdh > 0) || Boolean(s.breakout);
+        const pctMove = pdh > 0 ? parseFloat((((s.straddlePrice - pdh) / pdh) * 100).toFixed(2)) : 0;
+        const distToPdh = (pdh > 0 && s.straddlePrice <= pdh) ? parseFloat((((pdh - s.straddlePrice) / pdh) * 100).toFixed(2)) : 0;
+
+        let maxPeakPct = 0;
+        let maxPeakPrice = s.straddlePrice || 0;
+        if (crossCount > 0) {
+          const pcts = events.map(e => Number(e.peakPct) || (((Number(e.peakPrice) - pdh) / pdh) * 100));
+          maxPeakPct = Math.max(...pcts);
+          const peaks = events.map(e => Number(e.peakPrice) || 0);
+          maxPeakPrice = Math.max(...peaks);
+        }
+        if (!isFinite(maxPeakPct) || maxPeakPct <= 0) {
+          maxPeakPct = pctMove > 0 ? pctMove : 0;
+        }
+
+        // CE vs PE Skew
+        const ce = Number(s.ceLtp) || 0;
+        const pe = Number(s.peLtp) || 0;
+        const totalLeg = (ce + pe) > 0 ? (ce + pe) : (s.straddlePrice || 1);
+        const cePct = Math.round((ce / totalLeg) * 100) || 50;
+        const pePct = 100 - cePct;
+
+        return {
+          ...s,
+          pdh,
+          crossCount,
+          isAbove,
+          pctMove,
+          distToPdh,
+          maxPeakPct,
+          maxPeakPrice,
+          cePct,
+          pePct,
+          isCommodity: s.segment === 'MCX_COMM' || ['CRUDEOIL', 'NATURALGAS', 'GOLD', 'SILVER', 'COPPER'].includes(s.name),
+          isIndex: s.segment === 'IDX_I' || ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'].includes(s.name)
+        };
+      });
+    }
+
+    function renderActiveRuleTable() {
+      const container = document.getElementById('rowsContainer');
+      if (!container) return;
+
+      const enriched = getEnrichedList();
+      if (enriched.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding: 3rem; color: var(--text-dim);">Connecting to live Dhan tickstream...</div>';
+        return;
+      }
+
+      // Update Top Ribbon & Sidebar
+      const above = enriched.filter(e => e.isAbove);
+      const below = enriched.filter(e => !e.isAbove);
+      const multi = enriched.filter(e => e.crossCount >= 2);
+
+      document.getElementById('mActiveBreakouts').textContent = above.length;
+      document.getElementById('mMultiCross').textContent = multi.length;
+      document.getElementById('mTotalUniverse').textContent = enriched.length;
+
+      document.getElementById('sideAboveCount').textContent = above.length;
+      document.getElementById('sideBelowCount').textContent = below.length;
+      document.getElementById('sideMultiCount').textContent = multi.length;
+
+      const sortedByGain = [...enriched].sort((a, b) => b.pctMove - a.pctMove || b.maxPeakPct - a.maxPeakPct);
+      const champ = sortedByGain[0];
+      if (champ) {
+        document.getElementById('mTopPeakSym').textContent = `${champ.name} (+${champ.maxPeakPct.toFixed(1)}%)`;
+        document.getElementById('mTopPeakSub').textContent = `Straddle: ₹${champ.straddlePrice} • PDH: ₹${champ.pdh}`;
+        document.getElementById('sideChampName').textContent = champ.name;
+        document.getElementById('sideChampPct').textContent = `${champ.pctMove >= 0 ? '+' : ''}${champ.pctMove}%`;
+        document.getElementById('sideChampDetail').textContent = `Straddle: ₹${champ.straddlePrice} • Day Peak: ₹${champ.maxPeakPrice}`;
+      }
+
+      const sortedByMulti = [...enriched].sort((a, b) => b.crossCount - a.crossCount || b.maxPeakPct - a.maxPeakPct);
+      const multiLead = sortedByMulti[0];
+      if (multiLead) {
+        document.getElementById('sideMultiName').textContent = multiLead.name;
+        document.getElementById('sideMultiHits').textContent = `${multiLead.crossCount} Crossovers`;
+        document.getElementById('sideMultiDetail').textContent = `Peak Gain: +${multiLead.maxPeakPct.toFixed(1)}% above PDH`;
+      }
+
+      // Filter
+      let filtered = enriched;
+      if (searchQuery) filtered = filtered.filter(s => s.name.includes(searchQuery));
+      if (activeFilter === 'BREAKOUTS') filtered = filtered.filter(s => s.isAbove);
+      else if (activeFilter === 'MULTI') filtered = filtered.filter(s => s.crossCount >= 2);
+      else if (activeFilter === 'INDICES') filtered = filtered.filter(s => s.isIndex);
+      else if (activeFilter === 'MCX') filtered = filtered.filter(s => s.isCommodity);
+
+      // Rule-Specific Sorting
+      if (activeRule === 'RULE_DIVERGING') {
+        filtered.sort((a, b) => b.pctMove - a.pctMove || b.maxPeakPct - a.maxPeakPct);
+      } else if (activeRule === 'RULE_MULTI_CROSS') {
+        filtered.sort((a, b) => b.crossCount - a.crossCount || b.maxPeakPct - a.maxPeakPct);
+      } else if (activeRule === 'RULE_SKEW') {
+        filtered.sort((a, b) => Math.abs(b.cePct - 50) - Math.abs(a.cePct - 50));
+      } else if (activeRule === 'RULE_STALKING') {
+        filtered = filtered.filter(s => !s.isAbove && s.distToPdh > 0 && s.distToPdh <= 3.5);
+        filtered.sort((a, b) => a.distToPdh - b.distToPdh);
+      } else if (activeRule === 'RULE_BARBELL') {
+        filtered.sort((a, b) => b.maxPeakPct - a.maxPeakPct);
+      }
+
+      const displayList = filtered.slice(0, 40);
+      const maxVal = Math.max(15, ...displayList.map(s => Math.abs(s.pctMove)), ...displayList.map(s => s.maxPeakPct));
+
+      if (displayList.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding: 3rem; color: var(--text-dim);">No assets match this rule filter right now.</div>';
+        return;
+      }
+
+      container.innerHTML = displayList.map((s, idx) => {
+        const rank = idx + 1;
+        const rankClass = rank === 1 ? 'rank-1' : (rank === 2 ? 'rank-2' : (rank === 3 ? 'rank-3' : ''));
+        const isPos = s.pctMove >= 0;
+
+        let centerHtml = '';
+        let rightHtml = '';
+
+        if (activeRule === 'RULE_DIVERGING') {
+          const barWidthPct = Math.min(48, (Math.abs(s.pctMove) / maxVal) * 48);
+          const peakPosPct = 50 + Math.min(48, (s.maxPeakPct / maxVal) * 48);
+          centerHtml = `
+            <div class="diverging-track">
+              <div class="zero-divider-line"></div>
+              ${isPos ? `<div class="bar-gainer" style="width: ${barWidthPct}%;"></div>` : `<div class="bar-loser" style="width: ${barWidthPct}%;"></div>`}
+              ${s.maxPeakPct > 0 ? `<div class="peak-spike-pin" style="left: ${peakPosPct}%;"></div>` : ''}
+            </div>`;
+          rightHtml = `
+            <span class="mono" style="font-weight:800; font-size:0.92rem; color:${isPos ? 'var(--green-up)' : 'var(--red-down)'};">
+              ${isPos ? '+' : ''}${s.pctMove}%
+            </span>
+            ${s.crossCount > 0 ? `<span class="mono" style="font-size:0.65rem; color:var(--amber-accent);">🔥 ${s.crossCount} Hit${s.crossCount > 1 ? 's' : ''} (Pk +${s.maxPeakPct.toFixed(1)}%)</span>` : '<span style="font-size:0.65rem; color:var(--text-dim);">Retraced</span>'}`;
+        } else if (activeRule === 'RULE_MULTI_CROSS') {
+          const barWidth = Math.min(100, Math.max(10, s.crossCount * 25));
+          centerHtml = `
+            <div style="position:relative; height:20px; background:rgba(0,0,0,0.3); border-radius:4px; margin:0 0.5rem; overflow:hidden;">
+              <div style="width:${barWidth}%; height:100%; background:linear-gradient(90deg, #FF6E40, #FFB300); border-radius:4px; display:flex; align-items:center; padding-left:8px; font-size:0.7rem; font-weight:800; color:#000;">
+                ${s.crossCount} PDH Breakout Crosses
+              </div>
+            </div>`;
+          rightHtml = `
+            <span class="mono" style="font-weight:900; font-size:0.95rem; color:#FFB300;">🔥 ${s.crossCount} Hits</span>
+            <span class="mono" style="font-size:0.68rem; color:var(--green-up);">Peak: +${s.maxPeakPct.toFixed(1)}%</span>`;
+        } else if (activeRule === 'RULE_SKEW') {
+          centerHtml = `
+            <div class="skew-track">
+              <div class="skew-ce-bar" style="width: ${s.cePct}%;">CE ${s.cePct}%</div>
+              <div class="skew-pe-bar" style="width: ${s.pePct}%;">PE ${s.pePct}%</div>
+            </div>`;
+          const bias = s.cePct > 55 ? 'BULL SKEW' : (s.pePct > 55 ? 'BEAR SKEW' : 'GAMMA EXP');
+          const biasCol = s.cePct > 55 ? 'var(--green-up)' : (s.pePct > 55 ? 'var(--red-down)' : 'var(--amber-accent)');
+          rightHtml = `
+            <span class="mono" style="font-weight:800; font-size:0.85rem; color:${biasCol};">${bias}</span>
+            <span class="mono" style="font-size:0.68rem; color:var(--text-dim);">CE ₹${s.ceLtp} | PE ₹${s.peLtp}</span>`;
+        } else if (activeRule === 'RULE_STALKING') {
+          const proximityWidth = Math.max(5, 100 - (s.distToPdh * 25));
+          centerHtml = `
+            <div style="position:relative; height:20px; background:rgba(0,0,0,0.3); border-radius:4px; margin:0 0.5rem; overflow:hidden;">
+              <div style="width:${proximityWidth}%; height:100%; background:linear-gradient(90deg, #FFB300, #00E676); border-radius:4px; display:flex; align-items:center; padding-left:8px; font-size:0.7rem; font-weight:800; color:#000;">
+                ${s.distToPdh}% to Trigger
+              </div>
+            </div>`;
+          rightHtml = `
+            <span class="mono" style="font-weight:900; font-size:0.92rem; color:var(--amber-accent);">- ${s.distToPdh}%</span>
+            <span class="mono" style="font-size:0.68rem; color:var(--text-dim);">Str: ₹${s.straddlePrice} / PDH: ₹${s.pdh}</span>`;
+        } else if (activeRule === 'RULE_BARBELL') {
+          const livePct = 30 + Math.min(65, s.pctMove * 3);
+          const peakPct = Math.min(95, livePct + (s.maxPeakPct * 2));
+          centerHtml = `
+            <div class="barbell-track">
+              <div class="barbell-line"></div>
+              <div class="barbell-spread-fill" style="left: 10%; width: ${peakPct - 10}%;"></div>
+              <div class="barbell-dot-min" style="left: 10%;" title="Session Low"></div>
+              <div class="barbell-badge-live mono" style="left: ${livePct}%;">₹${s.straddlePrice}</div>
+              <div class="barbell-dot-max" style="left: ${peakPct}%;" title="Peak Spike: ₹${s.maxPeakPrice}"></div>
+            </div>`;
+          rightHtml = `
+            <span class="mono" style="font-weight:800; font-size:0.88rem; color:var(--green-up);">+${s.maxPeakPct.toFixed(1)}% Peak</span>
+            <span class="mono" style="font-size:0.68rem; color:var(--text-dim);">Live: ₹${s.straddlePrice}</span>`;
+        }
+
+        return `
+          <div class="table-row-item ${rankClass}">
+            <div class="mono" style="font-weight:800; font-size:0.8rem; color:var(--text-dim);">#${rank}</div>
+
+            <div style="display:flex; flex-direction:column;">
+              <div style="font-size:0.88rem; font-weight:800; display:flex; align-items:center; gap:0.4rem;">
+                <span>${s.name}</span>
+                ${s.isIndex ? '<span class="tag-chip tag-idx">IDX</span>' : (s.isCommodity ? '<span class="tag-chip tag-mcx">MCX</span>' : '')}
+              </div>
+              <div class="mono" style="font-size:0.72rem; color:var(--text-dim);">₹${s.straddlePrice} / ₹${s.pdh}</div>
+            </div>
+
+            ${centerHtml}
+
+            <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end;">
+              ${rightHtml}
+            </div>
+
+            <div style="text-align:center;">
+              <button class="btn-preview-action" onclick="openPreviewModal('${s.name}')" title="Full-View Interactive Candlestick Chart & Event Log">
+                <span>🔍</span> PREVIEW
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderBloombergCanvas() {
+      const ctx = document.getElementById('bloombergCanvas');
+      if (!ctx) return;
+
+      const enriched = getEnrichedList();
+      let filtered = enriched;
+      if (searchQuery) filtered = filtered.filter(s => s.name.includes(searchQuery));
+      if (activeFilter === 'BREAKOUTS') filtered = filtered.filter(s => s.isAbove);
+      else if (activeFilter === 'MULTI') filtered = filtered.filter(s => s.crossCount >= 2);
+      else if (activeFilter === 'INDICES') filtered = filtered.filter(s => s.isIndex);
+      else if (activeFilter === 'MCX') filtered = filtered.filter(s => s.isCommodity);
+
+      filtered.sort((a, b) => b.pctMove - a.pctMove);
+      const topItems = filtered.slice(0, 22);
+
+      const labels = topItems.map((s, i) => `${i + 1}. ${s.name}`);
+      const dataPoints = topItems.map(s => s.pctMove);
+      const peakPoints = topItems.map(s => s.maxPeakPct);
+      const bgColors = dataPoints.map(v => v >= 0 ? '#00E676' : '#FF3D57');
+
+      if (chartInstance) chartInstance.destroy();
+
+      const isDark = document.body.getAttribute('data-theme') !== 'light';
+      const textCol = isDark ? '#F8FAFC' : '#0F172A';
+      const gridCol = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
+
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Live % Move from PDH',
+              data: dataPoints,
+              backgroundColor: bgColors,
+              borderRadius: 4,
+              barThickness: 16
+            },
+            {
+              label: 'Intraday Peak Spike %',
+              data: peakPoints,
+              backgroundColor: '#FFD700',
+              borderRadius: 4,
+              barThickness: 6
+            }
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: textCol, font: { weight: 'bold', family: 'Inter' } }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw}%`
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: gridCol },
+              ticks: { color: textCol, callback: (v) => `${v}%` }
+            },
+            y: {
+              grid: { display: false },
+              ticks: { color: textCol, font: { weight: 'bold', size: 11 } }
+            }
+          }
+        }
+      });
+    }
+
+    // =========================================================================
+    // MODAL PREVIEW HANDLER
+    // =========================================================================
+    function openPreviewModal(symName) {
+      currentModalSymName = symName;
+      const s = liveSymbols[symName];
+      if (!s) return;
+
+      const modal = document.getElementById('previewModal');
+      const pdh = s.prevDayHighStraddle || s.prevCloseStraddle || s.prevBarClose || 0;
+      const events = s.crossoverEvents || [];
+      const crossCount = events.length;
+      const isAbove = (s.straddlePrice > pdh && pdh > 0) || Boolean(s.breakout);
+      const pctMove = pdh > 0 ? (((s.straddlePrice - pdh) / pdh) * 100).toFixed(2) : '0.00';
+
+      let maxPeakPct = 0;
+      let maxPeakPrice = s.straddlePrice || 0;
+      if (crossCount > 0) {
+        const pcts = events.map(e => Number(e.peakPct) || (((Number(e.peakPrice) - pdh) / pdh) * 100));
+        maxPeakPct = Math.max(...pcts);
+        const peaks = events.map(e => Number(e.peakPrice) || 0);
+        maxPeakPrice = Math.max(...peaks);
+      }
+
+      document.getElementById('modalTitle').textContent = `${s.name} STRADDLE OVERVIEW`;
+      document.getElementById('modalSubTitle').textContent = `ATM Strike: ${s.atmStrike} | Security ID: ${s.securityId || '--'}`;
+      
+      const badge = document.getElementById('modalSourceBadge');
+      badge.textContent = s.isLive ? '🟢 LIVE DHAN STREAM' : '🟠 SIMULATED';
+      badge.style.color = s.isLive ? 'var(--green-up)' : 'var(--amber-accent)';
+      badge.style.borderColor = s.isLive ? 'var(--green-up)' : 'var(--amber-accent)';
+
+      document.getElementById('mValStraddle').textContent = `₹${s.straddlePrice || '0.00'}`;
+      document.getElementById('mValStraddle').style.color = isAbove ? 'var(--green-up)' : 'var(--amber-accent)';
+      document.getElementById('mValLegs').textContent = `CE: ₹${s.ceLtp ?? '--'} | PE: ₹${s.peLtp ?? '--'}`;
+      document.getElementById('mValPdh').textContent = `₹${pdh}`;
+      document.getElementById('mValPeakGain').textContent = `+${maxPeakPct.toFixed(2)}%`;
+      document.getElementById('mValPeakPrice').textContent = `Day High: ₹${maxPeakPrice}`;
+      document.getElementById('mValSpot').textContent = `₹${s.spotPrice || '0.00'}`;
+      document.getElementById('mValAtm').textContent = `ATM: ${s.atmStrike}`;
+
+      document.getElementById('modalCrossoverCount').textContent = `${crossCount} Events Recorded`;
+      
+      const tbody = document.getElementById('modalCrossoverBody');
+      if (events.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-dim); padding:1.5rem;">No PDH breakouts recorded yet today. Operating below trigger level.</td></tr>';
+      } else {
+        tbody.innerHTML = events.map((e, idx) => `
+          <tr>
+            <td class="mono">${e.time || '--'}</td>
+            <td><b style="color:var(--amber-accent);">Cross #${idx + 1} (${idx === 0 ? '1st Breakout' : 'Retest Entry'})</b></td>
+            <td class="mono">₹${e.straddlePrice || s.straddlePrice}</td>
+            <td class="mono" style="color:var(--gold-peak); font-weight:800;">₹${e.peakPrice || s.straddlePrice}</td>
+            <td class="mono" style="color:var(--green-up); font-weight:900;">+${Number(e.peakPct || 0).toFixed(1)}%</td>
+            <td><span style="color:var(--green-up); font-weight:800;">✅ Dispatched</span></td>
+          </tr>
+        `).join('');
+      }
+
+      renderModalChart(s, pdh);
+      modal.classList.add('active');
+    }
+
+    function closePreviewModal() {
+      const modal = document.getElementById('previewModal');
+      if (modal) modal.classList.remove('active');
+      if (modalChartInstance) {
+        modalChartInstance.destroy();
+        modalChartInstance = null;
+      }
+      currentModalSymName = null;
+    }
+
+    function renderModalChart(s, pdh) {
+      const ctx = document.getElementById('modalChartCanvas');
+      if (!ctx) return;
+
+      if (modalChartInstance) modalChartInstance.destroy();
+
+      const history = s.history || [];
+      const labels = history.map(h => h.time || '');
+      const prices = history.map(h => h.price || 0);
+      const pdhLine = history.map(() => pdh);
+
+      const isDark = document.body.getAttribute('data-theme') !== 'light';
+      const textCol = isDark ? '#F8FAFC' : '#0F172A';
+
+      modalChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'ATM Straddle Price (CE+PE)',
+              data: prices,
+              borderColor: '#00E676',
+              backgroundColor: 'rgba(0, 230, 118, 0.1)',
+              fill: true,
+              tension: 0.25,
+              borderWidth: 2.5,
+              pointRadius: 2
+            },
+            {
+              label: 'PDH Breakout Level',
+              data: pdhLine,
+              borderColor: '#FF3D57',
+              borderDash: [6, 4],
+              borderWidth: 2,
+              pointRadius: 0,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: textCol, font: { weight: 'bold' } } }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: textCol, maxTicksLimit: 12 }
+            },
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: textCol, callback: (v) => `₹${v}` }
+            }
+          }
+        }
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closePreviewModal();
+    });
+
+    async function pollData() {
+      try {
+        const res = await fetch('/api/status');
+        if (res.ok) {
+          const json = await res.json();
+          liveSymbols = json.state?.symbols || {};
+          if (activeRule === 'RULE_BLOOMBERG') renderBloombergCanvas();
+          else renderActiveRuleTable();
+
+          if (currentModalSymName && liveSymbols[currentModalSymName]) {
+            // Live update modal in background
+            const updated = liveSymbols[currentModalSymName];
+            const pdh = updated.prevDayHighStraddle || updated.prevCloseStraddle || updated.prevBarClose || 0;
+            document.getElementById('mValStraddle').textContent = `₹${updated.straddlePrice || '0.00'}`;
+            document.getElementById('mValSpot').textContent = `₹${updated.spotPrice || '0.00'}`;
+          }
+        }
+      } catch (e) {
+        console.error('Polling error:', e);
+      }
+    }
+
+    setInterval(pollData, 2000);
+    pollData();
+    updateRuleBanner();
+  </script>
+</body>
+</html>
