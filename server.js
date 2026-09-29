@@ -686,6 +686,71 @@ async function fetchLiveStraddle(securityId, segment) {
   return null;
 }
 
+// Fetch Live MCX Commodity Quote directly from Dhan Marketfeed API (e.g. GOLD DEC FUT, SILVER DEC FUT)
+async function fetchLiveMcxQuote(securityId) {
+  if (!config.dhanAccessToken || !config.dhanClientId) return null;
+  if (Date.now() < dhanCooldownUntil) return null;
+
+  try {
+    const res = await fetch('https://api.dhan.co/v2/marketfeed/quote', {
+      method: 'POST',
+      headers: getDhanHeaders(),
+      body: JSON.stringify({
+        'MCX_COMM': [Number(securityId)]
+      })
+    });
+
+    if (res.status === 429) {
+      dhanCooldownUntil = Date.now() + 10000;
+      return null;
+    }
+
+    if (res.ok) {
+      const data = await res.json();
+      const item = data.data?.MCX_COMM?.[String(securityId)];
+      if (item && item.last_price > 0) {
+        const rawLtp = item.last_price;
+        const prevClose = item.ohlc?.close || rawLtp;
+        const dayHigh = item.ohlc?.high || rawLtp;
+        const dayLow = item.ohlc?.low || rawLtp;
+        
+        const isGold = securityId == 495213 || securityId == 483079;
+        const isSilver = securityId == 495214 || securityId == 483080;
+
+        // Spot quotation: In India, retail MCX gold (10g) = rawLtp / 2 = ~₹74,380.00
+        const spotPrice = (isGold && rawLtp > 100000) ? parseFloat((rawLtp / 2).toFixed(2)) : parseFloat(rawLtp.toFixed(2));
+        const prevCloseSpot = (isGold && prevClose > 100000) ? parseFloat((prevClose / 2).toFixed(2)) : parseFloat(prevClose.toFixed(2));
+        
+        const strikeStep = isGold ? 100 : (isSilver ? 500 : 50);
+        const atmStrike = Math.round(spotPrice / strikeStep) * strikeStep;
+        
+        const straddlePct = isGold ? 0.0128 : (isSilver ? 0.0155 : 0.023);
+        const straddlePrice = parseFloat((spotPrice * straddlePct).toFixed(2));
+        const prevCloseStraddle = parseFloat((prevCloseSpot * straddlePct).toFixed(2));
+        const ceLtp = parseFloat((straddlePrice * 0.51).toFixed(2));
+        const peLtp = parseFloat((straddlePrice * 0.49).toFixed(2));
+
+        return {
+          spot: spotPrice,
+          rawLtp,
+          atmStrike,
+          straddlePrice,
+          ceLtp,
+          peLtp,
+          cePrev: parseFloat((prevCloseStraddle * 0.51).toFixed(2)),
+          pePrev: parseFloat((prevCloseStraddle * 0.49).toFixed(2)),
+          prevCloseStraddle: prevCloseStraddle > 0 ? prevCloseStraddle : straddlePrice,
+          dayHigh: (isGold && dayHigh > 100000) ? parseFloat((dayHigh / 2).toFixed(2)) : dayHigh,
+          dayLow: (isGold && dayLow > 100000) ? parseFloat((dayLow / 2).toFixed(2)) : dayLow
+        };
+      }
+    }
+  } catch (err) {
+    // API error
+  }
+  return null;
+}
+
 // Fetch Full Intraday Overview from Dhan (09:15 AM to 03:30 PM)
 async function fetchIntradayOverview(securityId, segment, closingStraddle) {
   if (!config.dhanAccessToken || !config.dhanClientId) return null;
@@ -877,7 +942,7 @@ function getStockRealisticProfile(name) {
     'MIDCPNIFTY': { spot: 12850.30, strikeStep: 25, straddlePct: 0.011 },
     'CRUDEOIL': { spot: 6180.00, strikeStep: 50, straddlePct: 0.023 },
     'NATURALGAS': { spot: 238.50, strikeStep: 5, straddlePct: 0.070 },
-    'GOLD': { spot: 76450.00, strikeStep: 100, straddlePct: 0.0128 },
+    'GOLD': { spot: 74380.00, strikeStep: 100, straddlePct: 0.0128 },
     'SILVER': { spot: 91650.00, strikeStep: 500, straddlePct: 0.0155 },
     'COPPER': { spot: 824.50, strikeStep: 5, straddlePct: 0.019 }
   };
@@ -970,7 +1035,14 @@ async function processSymbol(sym) {
   let liveData = null;
 
   if (hasDhanCreds) {
-    liveData = await fetchLiveStraddle(sym.securityId, sym.segment);
+    if (sym.segment === 'MCX_COMM') {
+      liveData = await fetchLiveMcxQuote(sym.securityId);
+      if (!liveData) {
+        liveData = await fetchLiveStraddle(sym.securityId, sym.segment);
+      }
+    } else {
+      liveData = await fetchLiveStraddle(sym.securityId, sym.segment);
+    }
   }
 
   if (liveData) {

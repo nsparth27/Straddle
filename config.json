@@ -39,12 +39,12 @@
     },
     {
       "name": "GOLD",
-      "securityId": 112,
+      "securityId": 495213,
       "segment": "MCX_COMM"
     },
     {
       "name": "SILVER",
-      "securityId": 113,
+      "securityId": 495214,
       "segment": "MCX_COMM"
     },
     {
