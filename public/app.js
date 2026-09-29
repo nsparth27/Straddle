@@ -1352,6 +1352,63 @@ async function manualSyncModalSymbol(btnEl) {
   }
 }
 
+async function sendStockReportFromModal(btnEl) {
+  if (!activeModalSymbol) return;
+  const originalHtml = btnEl ? btnEl.innerHTML : '';
+  const statusMsgEl = document.getElementById('modalReportStatusMsg');
+
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.innerHTML = `<span>⏳</span> DISPATCHING...`;
+  }
+  if (statusMsgEl) {
+    statusMsgEl.style.display = 'inline-block';
+    statusMsgEl.style.color = 'var(--bb-amber)';
+    statusMsgEl.textContent = `⏳ Sending ${activeModalSymbol} report to Telegram...`;
+  }
+
+  try {
+    const res = await fetch('/api/send-symbol-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol: activeModalSymbol })
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      if (btnEl) {
+        btnEl.innerHTML = `<span>✓✓</span> SENT!`;
+        btnEl.style.background = 'var(--bb-green)';
+      }
+      if (statusMsgEl) {
+        statusMsgEl.style.color = 'var(--bb-green)';
+        statusMsgEl.textContent = `✓ Report for ${activeModalSymbol} dispatched to Telegram!`;
+      }
+      setTimeout(() => {
+        if (btnEl) {
+          btnEl.disabled = false;
+          btnEl.innerHTML = originalHtml;
+          btnEl.style.background = '';
+        }
+        if (statusMsgEl) {
+          setTimeout(() => { statusMsgEl.style.display = 'none'; }, 2500);
+        }
+      }, 2500);
+    } else {
+      throw new Error(data.error || 'Failed to dispatch');
+    }
+  } catch (err) {
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.innerHTML = `<span>❌</span> FAILED`;
+      setTimeout(() => { btnEl.innerHTML = originalHtml; }, 2000);
+    }
+    if (statusMsgEl) {
+      statusMsgEl.style.color = 'var(--bb-red)';
+      statusMsgEl.textContent = `❌ Error: ${err.message}`;
+    }
+  }
+}
+
 function closePreviewModal() {
   const modal = document.getElementById('previewChartModal');
   if (modal) modal.classList.remove('active');

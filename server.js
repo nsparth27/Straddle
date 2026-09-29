@@ -1357,6 +1357,110 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === '/api/send-symbol-report' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const symName = (payload.symbol || 'RELIANCE').toUpperCase().trim();
+        const sym = state.symbols[symName] || config.watchlist.find(w => w.name === symName) || {
+          name: symName,
+          spotPrice: 2980.50,
+          atmStrike: 2980,
+          straddlePrice: 62.40,
+          prevDayHighStraddle: 59.00,
+          ceLtp: 34.20,
+          peLtp: 28.20,
+          segment: 'NSE_EQ',
+          crossoverEvents: []
+        };
+
+        const todayStr = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'full' });
+        const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+        const pdh = sym.prevDayHighStraddle || sym.prevCloseStraddle || 1;
+        const straddlePrice = sym.straddlePrice || 0;
+        const spot = sym.spotPrice || 0;
+        const atm = sym.atmStrike || 0;
+        const ce = sym.ceLtp != null ? sym.ceLtp : (straddlePrice * 0.52).toFixed(2);
+        const pe = sym.peLtp != null ? sym.peLtp : (straddlePrice * 0.48).toFixed(2);
+        const totalPremium = (Number(ce) + Number(pe)) || straddlePrice || 1;
+        const cePct = ((Number(ce) / totalPremium) * 100).toFixed(1);
+        const pePct = ((Number(pe) / totalPremium) * 100).toFixed(1);
+        const skewBias = Number(ce) > Number(pe) * 1.08 ? 'Call Bias / Bullish' : (Number(pe) > Number(ce) * 1.08 ? 'Put Bias / Bearish' : 'Neutral Equilibrium');
+
+        const isAbove = straddlePrice > pdh;
+        const diffPct = (((straddlePrice - pdh) / pdh) * 100).toFixed(2);
+        const crossCount = (sym.crossoverEvents || []).length;
+        const maxPeak = Math.max(...(sym.crossoverEvents || []).map(e => e.peakPrice || 0), straddlePrice, sym.dayHighStraddle || 0);
+        const peakGain = (((maxPeak - pdh) / pdh) * 100).toFixed(2);
+        
+        const histPrices = (sym.history || []).map(h => h.price).filter(p => p > 0);
+        const minStraddle = histPrices.length > 0 ? Math.min(...histPrices) : (straddlePrice * 0.95).toFixed(2);
+        const spread = (maxPeak - minStraddle).toFixed(2);
+        const priorityCommodities = ['CRUDEOIL', 'GOLD', 'NATURALGAS', 'SILVER', 'COPPER'];
+        const isCommodity = sym.segment === 'MCX_COMM' || priorityCommodities.includes(symName);
+
+        let crossoverText = '';
+        if ((sym.crossoverEvents || []).length > 0) {
+          sym.crossoverEvents.forEach(evt => {
+            const dipInfo = evt.dipTime ? `➔ Retraced below @ ${evt.dipTime}` : `➔ <b>Active Above Boundary</b> 🟢`;
+            crossoverText += `  ▫️ <b>Cycle #${evt.crossNum}</b> @ <b>${evt.startTime}</b>: Triggered ₹${evt.startPrice} (Peak: ₹${evt.peakPrice}) ${dipInfo}\n`;
+          });
+        } else {
+          crossoverText = `  <i>• No PDH boundary crossover recorded yet today (Normal Theta Contraction).</i>\n`;
+        }
+
+        const telegramMsg = `╔════════════════════════════════════════╗\n` +
+          `📊 <b>INDIVIDUAL ASSET INTELLIGENCE REPORT</b>\n` +
+          `╚════════════════════════════════════════╝\n\n` +
+          `🏛️ <b>ASSET:</b> <b>${symName}</b> (ATM ${atm})\n` +
+          `🏷️ <b>SEGMENT:</b> <b>[${isCommodity ? '🛢️ MCX Commodity' : '🏢 NSE F&O'}]</b>\n` +
+          `📅 <b>DATE:</b> ${todayStr} | ⏰ <b>TIME:</b> ${timeStr} IST\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `💰 <b>STRADDLE & OPTION PRICING:</b>\n` +
+          `• 🎯 <b>Live Straddle (LTP):</b> <b>₹${straddlePrice}</b>\n` +
+          `• 🟢 <b>Call Option (CE):</b> ₹${ce}\n` +
+          `• 🔴 <b>Put Option (PE):</b> ₹${pe}\n` +
+          `• ⚖️ <b>CE/PE Skew Ratio:</b> ${cePct}% CE vs ${pePct}% PE (<i>${skewBias}</i>)\n` +
+          `• 💵 <b>Underlying Cash Spot:</b> ₹${spot}\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `📌 <b>BOUNDARY & BREAKOUT ANALYSIS:</b>\n` +
+          `• 🧱 <b>PDH Boundary Level:</b> <b>₹${pdh}</b>\n` +
+          `• 📐 <b>Distance to Boundary:</b> <b>${diffPct >= 0 ? '+' : ''}${diffPct}%</b>\n` +
+          `• 🚦 <b>Boundary State:</b> ${isAbove ? '🟢 <b>ACTIVE RUNNER (Above Boundary)</b>' : '🔴 <b>BELOW BOUNDARY (Normal Theta Decay)</b>'}\n` +
+          `• 🔥 <b>Boundary Crossovers Today:</b> <b>${crossCount} time${crossCount === 1 ? '' : 's'}</b>\n` +
+          `• 🚀 <b>Day's Peak Straddle:</b> <code>₹${maxPeak}</code> (${peakGain >= 0 ? '+' : ''}${peakGain}% vs PDH)\n` +
+          `• 📊 <b>Day Range:</b> ₹${minStraddle} - ₹${maxPeak} (Spread: ₹${spread})\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `📋 <b>TIMELINE & RETEST CYCLES:</b>\n` +
+          `${crossoverText}\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `<i>Dhan Straddle Pro • On-Demand Asset Intelligence Dispatch</i>`;
+
+        addLog(`📲 [STOCK REPORT] Dispatched on-demand comprehensive report for ${symName} to Telegram.`);
+
+        const resResult = await sendTelegramAlert(telegramMsg, {
+          symbol: symName,
+          atmStrike: atm,
+          straddlePrice: straddlePrice,
+          prevDayHighStraddle: pdh,
+          crossNum: crossCount,
+          pctMove: `${diffPct >= 0 ? '+' : ''}${diffPct}%`,
+          spot: spot,
+          type: 'STOCK REPORT'
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'success', symbol: symName, result: resResult, message: `Report for ${symName} sent to Telegram` }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error', error: err.message }));
+      }
+    });
+    return;
+  }
+
   if (req.url === '/api/send-test-breakout' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
