@@ -706,9 +706,168 @@
       padding: 0.55rem 0.75rem;
       border-bottom: 1px solid var(--border-subtle);
     }
+
+    /* 🔒 PIN Security Modal Styles */
+    .pin-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 9, 14, 0.96);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 99999;
+    }
+    .pin-card {
+      background: var(--bg-surface);
+      border: 2px solid var(--amber-accent);
+      border-radius: 12px;
+      box-shadow: 0 0 35px rgba(255, 179, 0, 0.2);
+      width: 90%;
+      max-width: 440px;
+      padding: 2.2rem;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.2rem;
+    }
+    .pin-badge {
+      background: rgba(255, 179, 0, 0.12);
+      border: 1px solid var(--amber-accent);
+      color: var(--amber-accent);
+      font-size: 0.75rem;
+      font-weight: 800;
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      letter-spacing: 1px;
+    }
+    .pin-header .tag {
+      background: var(--amber-accent);
+      color: #000;
+      font-size: 0.7rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 3px;
+      font-weight: 900;
+    }
+    .pin-header h2 {
+      font-size: 1.3rem;
+      color: var(--text-main);
+      margin-top: 0.4rem;
+      font-weight: 800;
+    }
+    .pin-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .pin-input-container {
+      display: flex;
+      width: 100%;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .pin-input-container input {
+      flex: 1;
+      background: #000;
+      border: 2px solid var(--border-strong);
+      color: var(--amber-accent);
+      font-size: 1.6rem;
+      text-align: center;
+      letter-spacing: 8px;
+      padding: 0.7rem;
+      border-radius: 6px;
+      outline: none;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    .pin-input-container input:focus {
+      border-color: var(--amber-accent);
+      box-shadow: 0 0 15px rgba(255, 179, 0, 0.25);
+    }
+    .pin-submit-btn {
+      background: var(--amber-accent);
+      color: #000;
+      border: none;
+      font-family: inherit;
+      font-weight: 800;
+      font-size: 0.9rem;
+      padding: 0 1.2rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .pin-submit-btn:hover {
+      background: #FFC107;
+      box-shadow: 0 0 15px rgba(255, 179, 0, 0.35);
+    }
+    .pin-error-msg {
+      color: var(--red-down);
+      font-size: 0.82rem;
+      font-weight: 700;
+      min-height: 1.2rem;
+    }
+    .pin-lockout-box {
+      background: rgba(255, 61, 87, 0.12);
+      border: 1px solid var(--red-down);
+      border-radius: 8px;
+      padding: 1.1rem;
+      width: 100%;
+      margin-top: 0.5rem;
+      box-shadow: 0 0 20px rgba(255, 61, 87, 0.25);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .lockout-timer {
+      font-size: 1.8rem;
+      font-weight: 900;
+      color: var(--amber-accent);
+      letter-spacing: 2px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    @keyframes shakeAnimation {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+    .shake {
+      animation: shakeAnimation 0.4s ease-in-out;
+      border-color: var(--red-down) !important;
+    }
   </style>
 </head>
 <body>
+
+  <!-- 🔒 SECURITY PIN LOCK MODAL -->
+  <div id="pinLockModal" class="pin-modal-overlay">
+    <div class="pin-card">
+      <div class="pin-badge" id="pinBadge">🔒 SECURITY LEVEL 1</div>
+      <div class="pin-header">
+        <span class="tag">BLOOMBERG AUTH</span>
+        <h2>ENTER ACCESS PIN</h2>
+      </div>
+      <p class="pin-desc" id="pinDesc">This terminal is private. Enter the 4-digit security PIN to unlock live market data &amp; controls.</p>
+      
+      <div class="pin-input-container" id="pinInputContainer">
+        <input type="password" id="pinInput" maxlength="4" placeholder="••••" autocomplete="off" autofocus inputmode="numeric" onkeydown="if(event.key==='Enter') verifyPin()" />
+        <button class="pin-submit-btn" id="pinSubmitBtn" onclick="verifyPin()">UNLOCK [ ↵ ]</button>
+      </div>
+      
+      <div id="pinError" class="pin-error-msg"></div>
+
+      <!-- 3-Attempts Lockout Message & Timer -->
+      <div id="pinLockoutBox" class="pin-lockout-box" style="display: none;">
+        <div class="lockout-timer" id="lockoutTimer">⏳ 05:00</div>
+        <div class="lockout-msg" style="color: var(--red-down); font-weight: 800; font-size: 0.95rem; margin: 0.4rem 0;">🚫 TERMINAL LOCKED (3 Failed Attempts)</div>
+        <div class="lockout-tribute" style="font-size: 0.85rem; color: #FFF; background: #000; padding: 0.75rem 0.9rem; border-radius: 6px; border: 1px dashed var(--amber-accent); line-height: 1.5; margin-top: 0.5rem;">
+          💬 <b>ruk jaoo .. sab karo , urgent ha to paide dedo 10k or greater than to parth dhulla</b>
+        </div>
+      </div>
+
+      <div class="pin-footer" id="pinAttemptsLabel" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">Attempts remaining: 3 / 3</div>
+    </div>
+  </div>
 
   <div class="app-shell">
 
@@ -727,6 +886,7 @@
 
       <div style="display: flex; gap: 0.75rem; align-items: center;">
         <button class="rule-tab-btn" onclick="toggleTheme()" title="Dark / Light Studio Mode">🌓 Mode</button>
+        <button class="rule-tab-btn" onclick="lockTerminal()" title="Lock Session" style="border-color: var(--amber-accent); color: var(--amber-accent);">🔒 Lock</button>
         <a href="/" style="background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text-main); padding: 0.45rem 0.85rem; border-radius: 8px; text-decoration: none; font-size: 0.8rem; font-weight: 700;">
           ← Main Bloomberg Dashboard
         </a>
@@ -985,6 +1145,179 @@
   </div>
 
   <script>
+    // ==========================================
+    // 🔒 PIN AUTHENTICATION & 5-MIN LOCKOUT SYSTEM
+    // ==========================================
+    const TERMINAL_PIN = '2712';
+    const MAX_PIN_ATTEMPTS = 3;
+    const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+    let lockoutInterval = null;
+
+    function checkTerminalAuth() {
+      const isAuth = sessionStorage.getItem('terminal_auth') === 'true';
+      const modal = document.getElementById('pinLockModal');
+      if (!modal) return isAuth;
+
+      const blockUntil = parseInt(localStorage.getItem('terminal_block_until') || '0', 10);
+      const now = Date.now();
+
+      if (blockUntil > now) {
+        modal.style.display = 'flex';
+        triggerLockoutState(blockUntil);
+        return false;
+      }
+
+      if (isAuth) {
+        modal.style.display = 'none';
+        return true;
+      } else {
+        modal.style.display = 'flex';
+        resetPinInputUI();
+        const pinInput = document.getElementById('pinInput');
+        if (pinInput) setTimeout(() => pinInput.focus(), 150);
+        return false;
+      }
+    }
+
+    function resetPinInputUI() {
+      const inputContainer = document.getElementById('pinInputContainer');
+      const lockoutBox = document.getElementById('pinLockoutBox');
+      const attemptsLabel = document.getElementById('pinAttemptsLabel');
+      const errorEl = document.getElementById('pinError');
+      const pinInput = document.getElementById('pinInput');
+
+      if (lockoutInterval) {
+        clearInterval(lockoutInterval);
+        lockoutInterval = null;
+      }
+
+      if (inputContainer) inputContainer.style.display = 'flex';
+      if (lockoutBox) lockoutBox.style.display = 'none';
+      if (errorEl) {
+        errorEl.textContent = '';
+        errorEl.style.display = 'none';
+      }
+      if (pinInput) {
+        pinInput.disabled = false;
+        pinInput.value = '';
+      }
+
+      const failCount = parseInt(localStorage.getItem('terminal_fail_count') || '0', 10);
+      const remaining = Math.max(0, MAX_PIN_ATTEMPTS - failCount);
+      if (attemptsLabel) {
+        attemptsLabel.textContent = `Attempts remaining: ${remaining} / ${MAX_PIN_ATTEMPTS}`;
+        attemptsLabel.style.color = remaining <= 1 ? '#FF3D57' : 'var(--text-muted)';
+      }
+    }
+
+    function triggerLockoutState(blockUntil) {
+      const inputContainer = document.getElementById('pinInputContainer');
+      const lockoutBox = document.getElementById('pinLockoutBox');
+      const timerEl = document.getElementById('lockoutTimer');
+      const attemptsLabel = document.getElementById('pinAttemptsLabel');
+      const errorEl = document.getElementById('pinError');
+
+      if (inputContainer) inputContainer.style.display = 'none';
+      if (errorEl) errorEl.style.display = 'none';
+      if (lockoutBox) lockoutBox.style.display = 'flex';
+      if (attemptsLabel) {
+        attemptsLabel.textContent = '🔒 Security Lockout Active (3 Failed Attempts)';
+        attemptsLabel.style.color = '#FF3D57';
+      }
+
+      function updateTimer() {
+        const remainingMs = blockUntil - Date.now();
+        if (remainingMs <= 0) {
+          if (lockoutInterval) clearInterval(lockoutInterval);
+          lockoutInterval = null;
+          localStorage.removeItem('terminal_fail_count');
+          localStorage.removeItem('terminal_block_until');
+          resetPinInputUI();
+          const pinInput = document.getElementById('pinInput');
+          if (pinInput) pinInput.focus();
+          return;
+        }
+
+        const totalSeconds = Math.ceil(remainingMs / 1000);
+        const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const secs = String(totalSeconds % 60).padStart(2, '0');
+        if (timerEl) timerEl.textContent = `⏳ ${mins}:${secs}`;
+      }
+
+      updateTimer();
+      if (lockoutInterval) clearInterval(lockoutInterval);
+      lockoutInterval = setInterval(updateTimer, 1000);
+    }
+
+    function verifyPin() {
+      const blockUntil = parseInt(localStorage.getItem('terminal_block_until') || '0', 10);
+      if (blockUntil > Date.now()) {
+        triggerLockoutState(blockUntil);
+        return;
+      }
+
+      const pinInput = document.getElementById('pinInput');
+      const errorEl = document.getElementById('pinError');
+      const modal = document.getElementById('pinLockModal');
+      const card = modal?.querySelector('.pin-card');
+      const val = (pinInput?.value || '').trim();
+
+      if (!val) {
+        if (errorEl) {
+          errorEl.textContent = 'Please enter the 4-digit PIN.';
+          errorEl.style.display = 'block';
+        }
+        return;
+      }
+
+      if (val === TERMINAL_PIN) {
+        sessionStorage.setItem('terminal_auth', 'true');
+        localStorage.removeItem('terminal_fail_count');
+        localStorage.removeItem('terminal_block_until');
+        if (modal) modal.style.display = 'none';
+        if (errorEl) errorEl.style.display = 'none';
+        
+        pollData();
+        return;
+      }
+
+      // Incorrect PIN
+      let failCount = parseInt(localStorage.getItem('terminal_fail_count') || '0', 10) + 1;
+      localStorage.setItem('terminal_fail_count', failCount);
+
+      if (pinInput) {
+        pinInput.value = '';
+        pinInput.focus();
+      }
+
+      if (card) {
+        card.classList.add('shake');
+        setTimeout(() => card.classList.remove('shake'), 500);
+      }
+
+      if (failCount >= MAX_PIN_ATTEMPTS) {
+        const lockUntil = Date.now() + LOCKOUT_DURATION_MS;
+        localStorage.setItem('terminal_block_until', lockUntil);
+        triggerLockoutState(lockUntil);
+      } else {
+        const remaining = MAX_PIN_ATTEMPTS - failCount;
+        if (errorEl) {
+          errorEl.textContent = `❌ Incorrect PIN! ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`;
+          errorEl.style.display = 'block';
+        }
+        const attemptsLabel = document.getElementById('pinAttemptsLabel');
+        if (attemptsLabel) {
+          attemptsLabel.textContent = `Attempts remaining: ${remaining} / ${MAX_PIN_ATTEMPTS}`;
+          attemptsLabel.style.color = '#FF3D57';
+        }
+      }
+    }
+
+    function lockTerminal() {
+      sessionStorage.removeItem('terminal_auth');
+      checkTerminalAuth();
+    }
+
     let activeRule = 'RULE_DIVERGING';
     let activeFilter = 'ALL';
     let searchQuery = '';
@@ -1528,6 +1861,7 @@
     });
 
     async function pollData() {
+      if (sessionStorage.getItem('terminal_auth') !== 'true') return;
       try {
         const res = await fetch('/api/status');
         if (res.ok) {
@@ -1549,8 +1883,14 @@
       }
     }
 
+    document.addEventListener('DOMContentLoaded', () => {
+      if (checkTerminalAuth()) {
+        pollData();
+      }
+    });
+
     setInterval(pollData, 2000);
-    pollData();
+    checkTerminalAuth();
     updateRuleBanner();
   </script>
 </body>

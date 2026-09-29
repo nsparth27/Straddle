@@ -1,11 +1,188 @@
+// ==========================================
+// 🔒 PIN AUTHENTICATION & 5-MIN LOCKOUT SYSTEM
+// ==========================================
+const TERMINAL_PIN = '2712';
+const MAX_PIN_ATTEMPTS = 3;
+const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+let lockoutInterval = null;
+
+function checkTerminalAuth() {
+  const isAuth = sessionStorage.getItem('terminal_auth') === 'true';
+  const modal = document.getElementById('pinLockModal');
+  if (!modal) return isAuth;
+
+  const blockUntil = parseInt(localStorage.getItem('terminal_block_until') || '0', 10);
+  const now = Date.now();
+
+  if (blockUntil > now) {
+    modal.style.display = 'flex';
+    triggerLockoutState(blockUntil);
+    return false;
+  }
+
+  if (isAuth) {
+    modal.style.display = 'none';
+    return true;
+  } else {
+    modal.style.display = 'flex';
+    resetPinInputUI();
+    const pinInput = document.getElementById('pinInput');
+    if (pinInput) setTimeout(() => pinInput.focus(), 150);
+    return false;
+  }
+}
+
+function resetPinInputUI() {
+  const inputContainer = document.getElementById('pinInputContainer');
+  const lockoutBox = document.getElementById('pinLockoutBox');
+  const attemptsLabel = document.getElementById('pinAttemptsLabel');
+  const errorEl = document.getElementById('pinError');
+  const pinInput = document.getElementById('pinInput');
+
+  if (lockoutInterval) {
+    clearInterval(lockoutInterval);
+    lockoutInterval = null;
+  }
+
+  if (inputContainer) inputContainer.style.display = 'flex';
+  if (lockoutBox) lockoutBox.style.display = 'none';
+  if (errorEl) {
+    errorEl.textContent = '';
+    errorEl.style.display = 'none';
+  }
+  if (pinInput) {
+    pinInput.disabled = false;
+    pinInput.value = '';
+  }
+
+  const failCount = parseInt(localStorage.getItem('terminal_fail_count') || '0', 10);
+  const remaining = Math.max(0, MAX_PIN_ATTEMPTS - failCount);
+  if (attemptsLabel) {
+    attemptsLabel.textContent = `Attempts remaining: ${remaining} / ${MAX_PIN_ATTEMPTS}`;
+    attemptsLabel.style.color = remaining <= 1 ? '#FF5252' : 'var(--bb-text-muted)';
+  }
+}
+
+function triggerLockoutState(blockUntil) {
+  const inputContainer = document.getElementById('pinInputContainer');
+  const lockoutBox = document.getElementById('pinLockoutBox');
+  const timerEl = document.getElementById('lockoutTimer');
+  const attemptsLabel = document.getElementById('pinAttemptsLabel');
+  const errorEl = document.getElementById('pinError');
+
+  if (inputContainer) inputContainer.style.display = 'none';
+  if (errorEl) errorEl.style.display = 'none';
+  if (lockoutBox) lockoutBox.style.display = 'flex';
+  if (attemptsLabel) {
+    attemptsLabel.textContent = '🔒 Security Lockout Active (3 Failed Attempts)';
+    attemptsLabel.style.color = '#FF5252';
+  }
+
+  function updateTimer() {
+    const remainingMs = blockUntil - Date.now();
+    if (remainingMs <= 0) {
+      if (lockoutInterval) clearInterval(lockoutInterval);
+      lockoutInterval = null;
+      localStorage.removeItem('terminal_fail_count');
+      localStorage.removeItem('terminal_block_until');
+      resetPinInputUI();
+      const pinInput = document.getElementById('pinInput');
+      if (pinInput) pinInput.focus();
+      return;
+    }
+
+    const totalSeconds = Math.ceil(remainingMs / 1000);
+    const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+    const secs = String(totalSeconds % 60).padStart(2, '0');
+    if (timerEl) timerEl.textContent = `⏳ ${mins}:${secs}`;
+  }
+
+  updateTimer();
+  if (lockoutInterval) clearInterval(lockoutInterval);
+  lockoutInterval = setInterval(updateTimer, 1000);
+}
+
+function verifyPin() {
+  const blockUntil = parseInt(localStorage.getItem('terminal_block_until') || '0', 10);
+  if (blockUntil > Date.now()) {
+    triggerLockoutState(blockUntil);
+    return;
+  }
+
+  const pinInput = document.getElementById('pinInput');
+  const errorEl = document.getElementById('pinError');
+  const modal = document.getElementById('pinLockModal');
+  const card = modal?.querySelector('.pin-card');
+  const val = (pinInput?.value || '').trim();
+
+  if (!val) {
+    if (errorEl) {
+      errorEl.textContent = 'Please enter the 4-digit PIN.';
+      errorEl.style.display = 'block';
+    }
+    return;
+  }
+
+  if (val === TERMINAL_PIN) {
+    sessionStorage.setItem('terminal_auth', 'true');
+    localStorage.removeItem('terminal_fail_count');
+    localStorage.removeItem('terminal_block_until');
+    if (modal) modal.style.display = 'none';
+    if (errorEl) errorEl.style.display = 'none';
+    
+    // Trigger initial data load
+    loadSettings();
+    fetchStatus();
+    return;
+  }
+
+  // Incorrect PIN
+  let failCount = parseInt(localStorage.getItem('terminal_fail_count') || '0', 10) + 1;
+  localStorage.setItem('terminal_fail_count', failCount);
+
+  if (pinInput) {
+    pinInput.value = '';
+    pinInput.focus();
+  }
+
+  if (card) {
+    card.classList.add('shake');
+    setTimeout(() => card.classList.remove('shake'), 500);
+  }
+
+  if (failCount >= MAX_PIN_ATTEMPTS) {
+    const lockUntil = Date.now() + LOCKOUT_DURATION_MS;
+    localStorage.setItem('terminal_block_until', lockUntil);
+    triggerLockoutState(lockUntil);
+  } else {
+    const remaining = MAX_PIN_ATTEMPTS - failCount;
+    if (errorEl) {
+      errorEl.textContent = `❌ Incorrect PIN! ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`;
+      errorEl.style.display = 'block';
+    }
+    const attemptsLabel = document.getElementById('pinAttemptsLabel');
+    if (attemptsLabel) {
+      attemptsLabel.textContent = `Attempts remaining: ${remaining} / ${MAX_PIN_ATTEMPTS}`;
+      attemptsLabel.style.color = '#FF5252';
+    }
+  }
+}
+
+function lockTerminal() {
+  sessionStorage.removeItem('terminal_auth');
+  checkTerminalAuth();
+}
+
 // Terminal Initialization & Global State
 const charts = {};
 let currentFilter = 'ALL'; // 'ALL', 'INDICES', 'BREAKOUTS'
 let searchQuery = '';
 
 document.addEventListener('DOMContentLoaded', () => {
-  loadSettings();
-  fetchStatus();
+  if (checkTerminalAuth()) {
+    loadSettings();
+    fetchStatus();
+  }
 });
 
 // Global State
@@ -528,6 +705,7 @@ function renderSymbolCard(sym, isMarketOpen) {
 
 // Fetch & Update Live Status from Server
 async function fetchStatus() {
+  if (sessionStorage.getItem('terminal_auth') !== 'true') return;
   try {
     const res = await fetch('/api/status');
     if (!res.ok) return;
