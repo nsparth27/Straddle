@@ -644,6 +644,11 @@ async function fetchLiveStraddle(securityId, segment) {
       const spot = d.last_price;
       const oc = d.oc || {};
       if (spot && oc) {
+        // Validation: Reject raw unscaled / distorted Dhan MCX option chains (e.g. CRUDEOIL > 30000, NATURALGAS > 10000)
+        if (segment === 'MCX_COMM' && spot > 30000 && (securityId == 114 || securityId == 115 || securityId == 111)) {
+          return null;
+        }
+
         const strikes = Object.keys(oc).map(Number).filter(n => !isNaN(n));
         if (strikes.length > 0) {
           const atmStrike = strikes.reduce((prev, curr) => Math.abs(curr - spot) < Math.abs(prev - spot) ? curr : prev);
@@ -866,15 +871,15 @@ function generateSessionTimeline(segment, currentPrice, pdh, crossoverCount = 0)
 function getStockRealisticProfile(name) {
   const n = name.toUpperCase().trim();
   const EXACT_PRICES = {
-    'NIFTY': { spot: 23270.60, strikeStep: 50, straddlePct: 0.0102 },
-    'BANKNIFTY': { spot: 56055.75, strikeStep: 100, straddlePct: 0.0199 },
-    'FINNIFTY': { spot: 25318.35, strikeStep: 50, straddlePct: 0.0205 },
-    'MIDCPNIFTY': { spot: 13150.30, strikeStep: 25, straddlePct: 0.011 },
-    'CRUDEOIL': { spot: 6245.00, strikeStep: 50, straddlePct: 0.022 },
-    'NATURALGAS': { spot: 242.80, strikeStep: 5, straddlePct: 0.035 },
-    'GOLD': { spot: 76500.00, strikeStep: 100, straddlePct: 0.012 },
-    'SILVER': { spot: 91800.00, strikeStep: 500, straddlePct: 0.015 },
-    'COPPER': { spot: 825.50, strikeStep: 5, straddlePct: 0.018 }
+    'NIFTY': { spot: 24850.50, strikeStep: 50, straddlePct: 0.0102 },
+    'BANKNIFTY': { spot: 53200.75, strikeStep: 100, straddlePct: 0.0199 },
+    'FINNIFTY': { spot: 24150.35, strikeStep: 50, straddlePct: 0.0205 },
+    'MIDCPNIFTY': { spot: 12850.30, strikeStep: 25, straddlePct: 0.011 },
+    'CRUDEOIL': { spot: 6180.00, strikeStep: 50, straddlePct: 0.023 },
+    'NATURALGAS': { spot: 238.50, strikeStep: 5, straddlePct: 0.070 },
+    'GOLD': { spot: 76450.00, strikeStep: 100, straddlePct: 0.0128 },
+    'SILVER': { spot: 91650.00, strikeStep: 500, straddlePct: 0.0155 },
+    'COPPER': { spot: 824.50, strikeStep: 5, straddlePct: 0.019 }
   };
   if (EXACT_PRICES[n]) return EXACT_PRICES[n];
 
@@ -937,6 +942,31 @@ async function processSymbol(sym) {
   }
 
   const item = state.symbols[name];
+
+  // Auto-heal corrupted/drifted values from prior state for MCX & Priority Commodities
+  const profile = getStockRealisticProfile(name);
+  if (sym.segment === 'MCX_COMM' || ['CRUDEOIL', 'NATURALGAS', 'GOLD', 'SILVER', 'COPPER'].includes(name)) {
+    if (name === 'CRUDEOIL' && (item.spotPrice > 15000 || item.straddlePrice > 1000)) {
+      item.spotPrice = profile.spot;
+      item.atmStrike = Math.round(profile.spot / profile.strikeStep) * profile.strikeStep;
+      item.straddlePrice = parseFloat((profile.spot * profile.straddlePct).toFixed(2));
+      item.prevDayHighStraddle = parseFloat((item.straddlePrice * 1.05).toFixed(2));
+      item.prevCloseStraddle = item.straddlePrice;
+      item.dayHighStraddle = item.straddlePrice;
+      item.isLive = false;
+      item.hasReceivedLive = false;
+    } else if (name === 'NATURALGAS' && (item.spotPrice > 1000 || item.straddlePrice > 100)) {
+      item.spotPrice = profile.spot;
+      item.atmStrike = Math.round(profile.spot / profile.strikeStep) * profile.strikeStep;
+      item.straddlePrice = parseFloat((profile.spot * profile.straddlePct).toFixed(2));
+      item.prevDayHighStraddle = parseFloat((item.straddlePrice * 1.05).toFixed(2));
+      item.prevCloseStraddle = item.straddlePrice;
+      item.dayHighStraddle = item.straddlePrice;
+      item.isLive = false;
+      item.hasReceivedLive = false;
+    }
+  }
+
   let liveData = null;
 
   if (hasDhanCreds) {
@@ -1033,19 +1063,27 @@ async function processSymbol(sym) {
     recomputeCrossovers(item);
   } else {
     // Fallback when Dhan Option Chain does not list the symbol (e.g. MCX commodity or off-market contract)
+    // Mean-reverting realistic micro-jitter anchored to official standard profile
     item.isLive = false;
     item.dataSource = sym.segment === 'MCX_COMM' ? 'MCX_ESTIMATED' : 'SIMULATED';
-    const profile = getStockRealisticProfile(name);
-    const step = profile.spot > 10000 ? 0.25 : (profile.spot > 1000 ? 0.10 : 0.05);
-    const direction = (Math.random() - 0.48);
-    const straddleDelta = parseFloat((direction * step * (profile.spot * 0.001)).toFixed(2));
-    const spotDelta = parseFloat((direction * step * 3).toFixed(2));
+    
+    // Mean-reversion spot pull
+    const targetSpot = profile.spot;
+    const spotDeviation = (item.spotPrice - targetSpot) / targetSpot;
+    const spotPull = -0.04 * spotDeviation; // smooth mean-reversion
+    const spotJitter = (Math.random() - 0.5) * 0.0015;
+    item.spotPrice = parseFloat((item.spotPrice * (1 + spotPull + spotJitter)).toFixed(2));
 
-    item.straddlePrice = parseFloat(Math.max(0.10, item.straddlePrice + straddleDelta).toFixed(2));
-    item.spotPrice = parseFloat(Math.max(1.00, item.spotPrice + spotDelta).toFixed(2));
+    // Mean-reversion straddle pull
+    const targetStraddle = parseFloat((targetSpot * profile.straddlePct).toFixed(2));
+    const straddleDeviation = (item.straddlePrice - targetStraddle) / (targetStraddle || 1);
+    const straddlePull = -0.04 * straddleDeviation;
+    const straddleJitter = (Math.random() - 0.5) * 0.0025;
+    item.straddlePrice = parseFloat(Math.max(0.05, item.straddlePrice * (1 + straddlePull + straddleJitter)).toFixed(2));
+
     item.atmStrike = Math.round(item.spotPrice / profile.strikeStep) * profile.strikeStep;
-    item.ceLtp = parseFloat((item.straddlePrice * 0.52).toFixed(2));
-    item.peLtp = parseFloat((item.straddlePrice * 0.48).toFixed(2));
+    item.ceLtp = parseFloat((item.straddlePrice * 0.51).toFixed(2));
+    item.peLtp = parseFloat((item.straddlePrice * 0.49).toFixed(2));
 
     const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
     const lastPoint = item.history[item.history.length - 1];
