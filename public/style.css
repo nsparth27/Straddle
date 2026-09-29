@@ -1495,15 +1495,15 @@ input:focus, select:focus {
   }
 
   /* Strategy Rows in Tab 5 & Charts Page */
-  .strategy-rule-row {
+  .strategy-rule-row, .table-row-item {
     grid-template-columns: 1fr !important;
     gap: 0.5rem;
     padding: 0.75rem 0.6rem;
   }
-  .strategy-rule-header {
+  .strategy-rule-header, .ndtv-header-row {
     display: none !important;
   }
-  .rule-bar-center {
+  .rule-bar-center, .diverging-track, .skew-track, .barbell-track {
     width: 100%;
     margin: 0.4rem 0;
   }
@@ -1536,6 +1536,60 @@ input:focus, select:focus {
   .lockout-tribute {
     font-size: 0.78rem !important;
   }
+}
+
+/* Touch Targets & Close Buttons */
+.modal-close-btn, button[title*="Close"] {
+  min-width: 40px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Bloomberg Toast System */
+.bb-toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+.bb-toast {
+  pointer-events: auto;
+  min-width: 280px;
+  max-width: 420px;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  background: #0B0E14;
+  color: #FFF;
+  font-family: var(--bb-font);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-left: 4px solid var(--bb-cyan);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bb-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.bb-toast.success {
+  border-left-color: var(--bb-green);
+}
+.bb-toast.error {
+  border-left-color: var(--bb-red);
+}
+.bb-toast.warning {
+  border-left-color: var(--bb-amber);
 }
 
 

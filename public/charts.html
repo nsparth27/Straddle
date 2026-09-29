@@ -1391,45 +1391,48 @@
         return;
       }
 
-      if (val === TERMINAL_PIN) {
-        sessionStorage.setItem('terminal_auth', 'true');
-        localStorage.removeItem('terminal_fail_count');
-        localStorage.removeItem('terminal_block_until');
-        if (modal) modal.style.display = 'none';
-        if (errorEl) errorEl.style.display = 'none';
-        
-        pollData();
-        return;
-      }
+      try {
+        const res = await fetch('/api/verify-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: val })
+        });
+        const data = await res.json();
 
-      // Incorrect PIN
-      let failCount = parseInt(localStorage.getItem('terminal_fail_count') || '0', 10) + 1;
-      localStorage.setItem('terminal_fail_count', failCount);
-
-      if (pinInput) {
-        pinInput.value = '';
-        pinInput.focus();
-      }
-
-      if (card) {
-        card.classList.add('shake');
-        setTimeout(() => card.classList.remove('shake'), 500);
-      }
-
-      if (failCount >= MAX_PIN_ATTEMPTS) {
-        const lockUntil = Date.now() + LOCKOUT_DURATION_MS;
-        localStorage.setItem('terminal_block_until', lockUntil);
-        triggerLockoutState(lockUntil);
-      } else {
-        const remaining = MAX_PIN_ATTEMPTS - failCount;
-        if (errorEl) {
-          errorEl.textContent = `❌ Incorrect PIN! ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`;
-          errorEl.style.display = 'block';
+        if (res.ok && data.ok) {
+          sessionStorage.setItem('terminal_auth', 'true');
+          if (data.token) sessionStorage.setItem('terminal_session', data.token);
+          localStorage.removeItem('terminal_block_until');
+          if (modal) modal.style.display = 'none';
+          if (errorEl) errorEl.style.display = 'none';
+          pollData();
+          return;
         }
-        const attemptsLabel = document.getElementById('pinAttemptsLabel');
-        if (attemptsLabel) {
-          attemptsLabel.textContent = `Attempts remaining: ${remaining} / ${MAX_PIN_ATTEMPTS}`;
-          attemptsLabel.style.color = '#FF3D57';
+
+        // Incorrect PIN or lockout
+        if (pinInput) {
+          pinInput.value = '';
+          pinInput.focus();
+        }
+        if (card) {
+          card.classList.add('shake');
+          setTimeout(() => card.classList.remove('shake'), 500);
+        }
+
+        if (data.locked) {
+          const lockUntil = Date.now() + (data.remainingSecs || 300) * 1000;
+          localStorage.setItem('terminal_block_until', lockUntil);
+          triggerLockoutState(lockUntil);
+        } else {
+          if (errorEl) {
+            errorEl.textContent = `❌ ${data.message || 'Incorrect PIN!'}`;
+            errorEl.style.display = 'block';
+          }
+        }
+      } catch (err) {
+        if (errorEl) {
+          errorEl.textContent = `Connection error: ${err.message}`;
+          errorEl.style.display = 'block';
         }
       }
     }
@@ -1789,59 +1792,65 @@
       const peakPoints = topItems.map(s => s.maxPeakPct);
       const bgColors = dataPoints.map(v => v >= 0 ? '#00E676' : '#FF3D57');
 
-      if (chartInstance) chartInstance.destroy();
-
       const isDark = document.body.getAttribute('data-theme') !== 'light';
       const textCol = isDark ? '#F8FAFC' : '#0F172A';
       const gridCol = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
 
-      chartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              label: 'Live % Move from PDH',
-              data: dataPoints,
-              backgroundColor: bgColors,
-              borderRadius: 4,
-              barThickness: 16
+      if (chartInstance) {
+        chartInstance.data.labels = labels;
+        chartInstance.data.datasets[0].data = dataPoints;
+        chartInstance.data.datasets[0].backgroundColor = bgColors;
+        chartInstance.data.datasets[1].data = peakPoints;
+        chartInstance.update('none');
+      } else {
+        chartInstance = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: 'Live % Move from PDH',
+                data: dataPoints,
+                backgroundColor: bgColors,
+                borderRadius: 4,
+                barThickness: 16
+              },
+              {
+                label: 'Intraday Peak Spike %',
+                data: peakPoints,
+                backgroundColor: '#FFD700',
+                borderRadius: 4,
+                barThickness: 6
+              }
+            ]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: textCol, font: { weight: 'bold', family: 'Inter' } }
+              },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.dataset.label}: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw}%`
+                }
+              }
             },
-            {
-              label: 'Intraday Peak Spike %',
-              data: peakPoints,
-              backgroundColor: '#FFD700',
-              borderRadius: 4,
-              barThickness: 6
-            }
-          ]
-        },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              labels: { color: textCol, font: { weight: 'bold', family: 'Inter' } }
-            },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => `${ctx.dataset.label}: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw}%`
+            scales: {
+              x: {
+                grid: { color: gridCol },
+                ticks: { color: textCol, callback: (v) => `${v}%` }
+              },
+              y: {
+                grid: { display: false },
+                ticks: { color: textCol, font: { weight: 'bold', size: 11 } }
               }
             }
-          },
-          scales: {
-            x: {
-              grid: { color: gridCol },
-              ticks: { color: textCol, callback: (v) => `${v}%` }
-            },
-            y: {
-              grid: { display: false },
-              ticks: { color: textCol, font: { weight: 'bold', size: 11 } }
-            }
           }
-        }
-      });
+        });
+      }
     }
 
     // =========================================================================
@@ -2052,8 +2061,17 @@
             // Live update modal in background
             const updated = liveSymbols[currentModalSymName];
             const pdh = updated.prevDayHighStraddle || updated.prevCloseStraddle || updated.prevBarClose || 0;
-            document.getElementById('mValStraddle').textContent = `₹${updated.straddlePrice || '0.00'}`;
-            document.getElementById('mValSpot').textContent = `₹${updated.spotPrice || '0.00'}`;
+            const straddleEl = document.getElementById('mValStraddle');
+            const spotEl = document.getElementById('mValSpot');
+            if (straddleEl) straddleEl.textContent = `₹${updated.straddlePrice || '0.00'}`;
+            if (spotEl) spotEl.textContent = `₹${updated.spotPrice || '0.00'}`;
+
+            if (modalChartInstance && updated.history && updated.history.length > 0) {
+              modalChartInstance.data.labels = updated.history.map(h => h.time);
+              modalChartInstance.data.datasets[0].data = updated.history.map(h => h.price);
+              modalChartInstance.data.datasets[1].data = updated.history.map(() => pdh);
+              modalChartInstance.update('none');
+            }
           }
         }
       } catch (e) {

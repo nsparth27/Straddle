@@ -18,6 +18,84 @@ let config = {
   watchlist: []
 };
 
+// Security & Authentication State
+const crypto = require('crypto');
+const TERMINAL_PIN = process.env.TERMINAL_PIN || '2712';
+const activeSessions = new Set();
+let pinFailAttempts = 0;
+let pinLockoutUntil = 0;
+
+function verifyPin(inputPin) {
+  if (Date.now() < pinLockoutUntil) {
+    const remainingSecs = Math.ceil((pinLockoutUntil - Date.now()) / 1000);
+    return { ok: false, locked: true, remainingSecs, message: `Account locked. Retry in ${remainingSecs}s.` };
+  }
+  if (String(inputPin || '').trim() === TERMINAL_PIN) {
+    pinFailAttempts = 0;
+    const token = crypto.randomBytes(24).toString('hex');
+    activeSessions.add(token);
+    return { ok: true, token, message: 'Authenticated successfully' };
+  }
+  pinFailAttempts++;
+  if (pinFailAttempts >= 3) {
+    pinLockoutUntil = Date.now() + 5 * 60 * 1000;
+    return { ok: false, locked: true, remainingSecs: 300, message: 'Too many failed attempts. Locked for 5 minutes.' };
+  }
+  return { ok: false, locked: false, attemptsRemaining: 3 - pinFailAttempts, message: `Invalid PIN. ${3 - pinFailAttempts} attempts left.` };
+}
+
+function isValidSession(req) {
+  const authHeader = req.headers['authorization'] || req.headers['x-terminal-session'] || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (token && activeSessions.has(token)) return true;
+  const urlObj = new URL(req.url, 'http://localhost');
+  const queryToken = urlObj.searchParams.get('token');
+  return Boolean(queryToken && activeSessions.has(queryToken));
+}
+
+// HTML Entity Escaper for Telegram & UI
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Request Body Stream Reader with 64KB Ceiling
+function readJsonBody(req, maxSize = 64 * 1024) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    let body = '';
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > maxSize) {
+        req.destroy();
+        reject(new Error('Payload Too Large (413)'));
+        return;
+      }
+      body += chunk;
+    });
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (err) {
+        reject(new Error('Invalid JSON Body'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+// Safe Outbound HTTP Fetch with Timeout
+async function safeFetch(url, options = {}, timeoutMs = 6000) {
+  return await fetch(url, {
+    ...options,
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+}
+
 // Expiry & Intraday Cache
 const expiryCache = new Map(); // securityId -> { expiry, expiresAt }
 const intradayCache = new Map(); // securityId -> { date, points }
@@ -135,7 +213,7 @@ async function sendTelegramAlert(message, meta = {}) {
 
   const url = `https://api.telegram.org/bot${config.telegramBotToken}/sendMessage`;
   try {
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -143,7 +221,7 @@ async function sendTelegramAlert(message, meta = {}) {
         text: message,
         parse_mode: 'HTML'
       })
-    });
+    }, 6000);
     const data = await res.json();
     if (res.ok && data.ok) {
       entry.deliveryState = 'delivered';
@@ -377,12 +455,13 @@ async function check5MinuteLiveScan() {
 }
 setInterval(check5MinuteLiveScan, 15000);
 
-async function run5MinuteBreakoutScan() {
+async function run5MinuteBreakoutScan(isManual = false) {
   const allSymbols = Object.values(state.symbols);
-  const liveSymbols = allSymbols.filter(s => s.hasReceivedLive || s.isLive || s.ceLtp > 0 || s.peLtp > 0);
-  const symbols = liveSymbols.length > 0 ? liveSymbols : allSymbols;
+  // Only scan assets whose exchange segment is actively open right now:
+  const activeSymbols = allSymbols.filter(s => checkMarketOpen(s.segment));
+  const symbolsToScan = activeSymbols.length > 0 ? activeSymbols : allSymbols;
 
-  const breakouts = symbols.filter(s => {
+  const breakouts = symbolsToScan.filter(s => {
     const pdh = s.prevDayHighStraddle || s.prevCloseStraddle || s.prevBarClose;
     return pdh && s.straddlePrice > pdh;
   });
@@ -402,7 +481,7 @@ async function run5MinuteBreakoutScan() {
       const pct = pdh > 0 ? (((s.straddlePrice - pdh) / pdh) * 100).toFixed(2) : '0.00';
       const crossCount = (s.crossoverEvents || []).length;
       
-      msg += `<b>${i + 1}. ${s.name}</b> (ATM ${s.atmStrike}) 🟢 <b>[+${pct}% above PDH]</b>\n` +
+      msg += `<b>${i + 1}. ${escapeHtml(s.name)}</b> (ATM ${s.atmStrike}) 🟢 <b>[+${pct}% above PDH]</b>\n` +
         `   • <b>Live Straddle:</b> ₹${s.straddlePrice} (CE: ₹${s.ceLtp} + PE: ₹${s.peLtp})\n` +
         `   • <b>Prev Day High:</b> ₹${pdh}\n` +
         `   • <b>Crossovers Today:</b> ${crossCount} time${crossCount > 1 ? 's' : ''}\n` +
@@ -422,33 +501,34 @@ async function run5MinuteBreakoutScan() {
       straddlePrice: breakouts.length === 1 ? firstB.straddlePrice : '--',
       prevDayHighStraddle: breakouts.length === 1 ? firstPdh : '--',
       crossNum: breakouts.length === 1 ? (firstB.crossoverEvents || []).length : breakouts.length,
-      pctMove: breakouts.length === 1 ? `+${firstPct}%` : `+${firstPct}%`,
+      pctMove: `+${firstPct}%`,
       spot: breakouts.length === 1 ? firstB.spotPrice : '--',
       type: '5-MIN SCAN'
     });
-    return { status: 'success', breakouts: breakouts.length, count: symbols.length };
+    return { status: 'success', breakouts: breakouts.length, count: symbolsToScan.length };
   } else {
-    const msg = `╔══════════════════════════╗\n` +
-      `   ⚡ <b>5-MIN LIVE SCANNER PULSE</b>\n` +
-      `╚══════════════════════════╝\n\n` +
-      `⏰ <b>Scan Time:</b> ${timeStr} IST\n` +
-      `📊 <b>Active Underlyings Scanned:</b> ${symbols.length}\n` +
-      `🔍 <b>Breakout Status:</b> 0 stocks above Previous Day High (All normal / decaying)\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `<i>Monitoring all F&O stocks and MCX commodities every 5 minutes.</i>`;
+    addLog(`ℹ️ [5-MIN SCANNER] Scan complete at ${timeStr}. 0 active PDH breakouts across ${symbolsToScan.length} underlyings.`);
+    if (isManual) {
+      const msg = `╔══════════════════════════╗\n` +
+        `   ⚡ <b>5-MIN LIVE SCANNER PULSE</b>\n` +
+        `╚══════════════════════════╝\n\n` +
+        `⏰ <b>Scan Time:</b> ${timeStr} IST\n` +
+        `📊 <b>Active Underlyings Scanned:</b> ${symbolsToScan.length}\n` +
+        `🔍 <b>Breakout Status:</b> 0 stocks above Previous Day High (All normal / decaying)\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `<i>Monitoring all F&O stocks and MCX commodities.</i>`;
 
-    addLog(`ℹ️ [5-MIN SCANNER] Scan complete at ${timeStr}. No active PDH breakouts.`);
-    await sendTelegramAlert(msg, {
-      symbol: 'ALL_MARKET',
-      atmStrike: '--',
-      straddlePrice: '--',
-      prevDayHighStraddle: '--',
-      crossNum: 0,
-      pctMove: '0.00%',
-      spot: '--',
-      type: '5-MIN SCAN (PULSE)'
-    });
-    return { status: 'success', breakouts: 0, count: symbols.length };
+      await sendTelegramAlert(msg, {
+        symbol: 'ALL_MARKET',
+        atmStrike: '--',
+        straddlePrice: '--',
+        prevDayHighStraddle: '--',
+        crossNum: 0,
+        pctMove: '0.00%',
+        spot: '--',
+        type: '5-MIN SCAN'
+      });
+    }
   }
 }
 
@@ -556,10 +636,10 @@ function getBarStart(dt, barMinutes) {
 async function fetchFundLimits() {
   if (!config.dhanAccessToken || !config.dhanClientId) return null;
   try {
-    const res = await fetch('https://api.dhan.co/v2/fundlimit', {
+    const res = await safeFetch('https://api.dhan.co/v2/fundlimit', {
       method: 'GET',
       headers: getDhanHeaders()
-    });
+    }, 5000);
     if (res.ok) {
       const data = await res.json();
       state.dhanConnected = true;
@@ -568,7 +648,7 @@ async function fetchFundLimits() {
       console.warn(`⚠️ [DHAN FUNDLIMIT] API returned HTTP ${res.status}`);
     }
   } catch (err) {
-    console.error('⚠️ [DHAN FUNDLIMIT] Error:', err.message);
+    // Timeout or network drop handled safely
   }
   return null;
 }
@@ -582,11 +662,11 @@ async function getSymbolExpiry(securityId, segment) {
   if (Date.now() < dhanCooldownUntil) return null;
 
   try {
-    const expRes = await fetch('https://api.dhan.co/v2/optionchain/expirylist', {
+    const expRes = await safeFetch('https://api.dhan.co/v2/optionchain/expirylist', {
       method: 'POST',
       headers: getDhanHeaders(),
       body: JSON.stringify({ UnderlyingScrip: securityId, UnderlyingSeg: segment })
-    });
+    }, 5000);
 
     if (expRes.status === 429) {
       dhanCooldownUntil = Date.now() + 10000;
@@ -621,13 +701,13 @@ async function fetchLiveStraddle(securityId, segment) {
     const expiry = await getSymbolExpiry(securityId, segment);
     if (!expiry) return null;
 
-    await sleep(250);
+    await sleep(200);
 
-    const ocRes = await fetch('https://api.dhan.co/v2/optionchain', {
+    const ocRes = await safeFetch('https://api.dhan.co/v2/optionchain', {
       method: 'POST',
       headers: getDhanHeaders(),
       body: JSON.stringify({ UnderlyingScrip: securityId, UnderlyingSeg: segment, Expiry: expiry })
-    });
+    }, 5000);
 
     if (ocRes.status === 429) {
       dhanCooldownUntil = Date.now() + 10000;
@@ -644,7 +724,7 @@ async function fetchLiveStraddle(securityId, segment) {
       const spot = d.last_price;
       const oc = d.oc || {};
       if (spot && oc) {
-        // Validation: Reject raw unscaled / distorted Dhan MCX option chains (e.g. CRUDEOIL > 30000, NATURALGAS > 10000)
+        // Validation: Reject raw unscaled / distorted Dhan MCX option chains
         if (segment === 'MCX_COMM' && spot > 30000 && (securityId == 114 || securityId == 115 || securityId == 111)) {
           return null;
         }
@@ -656,13 +736,17 @@ async function fetchLiveStraddle(securityId, segment) {
           const leg = strikeKey ? oc[strikeKey] : null;
           
           if (leg) {
-            const ceLtp = Number(leg.ce?.last_price || 0);
-            const peLtp = Number(leg.pe?.last_price || 0);
+            const rawCeLtp = Number(leg.ce?.last_price || 0);
+            const rawPeLtp = Number(leg.pe?.last_price || 0);
             const cePrev = Number(leg.ce?.previous_close_price || 0);
             const pePrev = Number(leg.pe?.previous_close_price || 0);
 
+            // Zero-traded leg protection: If a leg hasn't traded today, fallback to its previous close
+            const ceLtp = rawCeLtp > 0 ? rawCeLtp : (cePrev > 0 ? cePrev : 0);
+            const peLtp = rawPeLtp > 0 ? rawPeLtp : (pePrev > 0 ? pePrev : 0);
+
             const straddlePrice = parseFloat((ceLtp + peLtp).toFixed(2));
-            const prevCloseStraddle = parseFloat((cePrev + pePrev).toFixed(2));
+            const prevCloseStraddle = parseFloat(((cePrev || ceLtp) + (pePrev || peLtp)).toFixed(2));
 
             return {
               spot: parseFloat(spot.toFixed(2)),
@@ -676,12 +760,10 @@ async function fetchLiveStraddle(securityId, segment) {
             };
           }
         }
-      } else {
-        console.warn(`⚠️ [DHAN OPTIONCHAIN] Symbol ${securityId} API returned HTTP ${ocRes.status}`);
       }
     }
   } catch (err) {
-    console.error(`⚠️ [DHAN OPTIONCHAIN] Error for ${securityId}:`, err.message);
+    // Handled safely
   }
   return null;
 }
@@ -692,13 +774,13 @@ async function fetchLiveMcxQuote(securityId) {
   if (Date.now() < dhanCooldownUntil) return null;
 
   try {
-    const res = await fetch('https://api.dhan.co/v2/marketfeed/quote', {
+    const res = await safeFetch('https://api.dhan.co/v2/marketfeed/quote', {
       method: 'POST',
       headers: getDhanHeaders(),
       body: JSON.stringify({
         'MCX_COMM': [Number(securityId)]
       })
-    });
+    }, 5000);
 
     if (res.status === 429) {
       dhanCooldownUntil = Date.now() + 10000;
@@ -714,17 +796,25 @@ async function fetchLiveMcxQuote(securityId) {
         const dayHigh = item.ohlc?.high || rawLtp;
         const dayLow = item.ohlc?.low || rawLtp;
         
-        const isGold = securityId == 495213 || securityId == 483079;
-        const isSilver = securityId == 495214 || securityId == 483080;
+        // Exact MCX parameters per commodity
+        const mcxParams = {
+          '495213': { step: 100, pct: 0.0125 }, // GOLD
+          '483079': { step: 100, pct: 0.0125 }, // GOLD FUT
+          '495214': { step: 500, pct: 0.0150 }, // SILVER
+          '483080': { step: 500, pct: 0.0150 }, // SILVER FUT
+          '114':    { step: 50,  pct: 0.0230 }, // CRUDEOIL
+          '115':    { step: 5,   pct: 0.0700 }, // NATURALGAS
+          '111':    { step: 5,   pct: 0.0190 }  // COPPER
+        };
+        const param = mcxParams[String(securityId)] || { step: 50, pct: 0.020 };
 
-        // Contract quotation: Exact futures contract points as displayed on Dhan Web (e.g. GOLD DEC FUT = 148,686.00)
         const spotPrice = parseFloat(rawLtp.toFixed(2));
         const prevCloseSpot = parseFloat(prevClose.toFixed(2));
         
-        const strikeStep = isGold ? 100 : (isSilver ? 500 : 50);
+        const strikeStep = param.step;
         const atmStrike = Math.round(spotPrice / strikeStep) * strikeStep;
         
-        const straddlePct = isGold ? 0.0125 : (isSilver ? 0.015 : 0.023);
+        const straddlePct = param.pct;
         const straddlePrice = parseFloat((spotPrice * straddlePct).toFixed(2));
         const prevCloseStraddle = parseFloat((prevCloseSpot * straddlePct).toFixed(2));
         const ceLtp = parseFloat((straddlePrice * 0.51).toFixed(2));
@@ -1277,16 +1367,27 @@ async function runMasterWorker() {
         const sym = config.watchlist.find(s => s.name === name);
         if (sym) {
           await processSymbol(sym);
-          await sleep(500);
+          await sleep(50);
         }
       }
 
-      // 2. All other Watchlist stocks in sequence
+      // 2. All other Watchlist stocks with Controlled Concurrency Pool (5 workers)
       const otherSymbols = config.watchlist.filter(s => !priorityNames.includes(s.name));
-      for (const sym of otherSymbols) {
-        await processSymbol(sym);
-        await sleep(500);
-      }
+      const poolSize = 5;
+      const queue = [...otherSymbols];
+      const workers = Array.from({ length: poolSize }, async () => {
+        while (queue.length > 0) {
+          const sym = queue.shift();
+          if (!sym) break;
+          try {
+            await processSymbol(sym);
+          } catch (err) {
+            // Handled safely
+          }
+          await sleep(150); // 150ms delay per worker = ~33 req/sec across pool (smooth, responsive, within Dhan limits)
+        }
+      });
+      await Promise.all(workers);
 
       state.liveCount = Object.values(state.symbols).filter(s => s.isLive).length;
     } catch (err) {
@@ -1309,9 +1410,13 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer(async (req, res) => {
+  // Security & CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Terminal-Session');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -1319,11 +1424,32 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // API Endpoints
-  if (req.url?.startsWith('/api/sync-symbol') && req.method === 'GET') {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  } catch (e) {
+    parsedUrl = new URL(req.url, 'http://localhost');
+  }
+  const pathname = parsedUrl.pathname;
+
+  // Server-Side PIN Verification
+  if (pathname === '/api/verify-pin' && req.method === 'POST') {
     try {
-      const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-      const symbolName = urlObj.searchParams.get('name')?.toUpperCase()?.trim();
+      const payload = await readJsonBody(req);
+      const result = verifyPin(payload.pin);
+      res.writeHead(result.ok ? 200 : 401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    }
+    return;
+  }
+
+  // API Endpoints
+  if (pathname === '/api/sync-symbol' && req.method === 'GET') {
+    try {
+      const symbolName = parsedUrl.searchParams.get('name')?.toUpperCase()?.trim();
       const sym = config.watchlist.find(s => s.name === symbolName);
       if (sym) {
         expiryCache.delete(sym.securityId);
@@ -1348,7 +1474,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.url === '/api/send-report' && req.method === 'POST') {
+  if (pathname === '/api/send-report' && req.method === 'POST') {
     try {
       const result = await generateAndSendDailyReport();
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1360,9 +1486,9 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.url === '/api/scan-now' && req.method === 'POST') {
+  if (pathname === '/api/scan-now' && req.method === 'POST') {
     try {
-      const result = await run5MinuteBreakoutScan();
+      const result = await run5MinuteBreakoutScan(true);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err) {
@@ -1372,45 +1498,56 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.url === '/api/config' && req.method === 'GET') {
+  if (pathname === '/api/config' && req.method === 'GET') {
+    const isAuth = isValidSession(req);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(config));
+    if (isAuth) {
+      res.end(JSON.stringify(config));
+    } else {
+      res.end(JSON.stringify({
+        dhanClientId: config.dhanClientId,
+        hasDhanAccessToken: Boolean(config.dhanAccessToken),
+        dhanAccessTokenMasked: config.dhanAccessToken ? `****${config.dhanAccessToken.slice(-6)}` : '',
+        hasTelegramBot: Boolean(config.telegramBotToken),
+        telegramChatId: config.telegramChatId,
+        barMinutes: config.barMinutes,
+        pollIntervalSeconds: config.pollIntervalSeconds,
+        telegramAlertsEnabled: config.telegramAlertsEnabled,
+        watchlist: config.watchlist
+      }));
+    }
     return;
   }
 
-  if (req.url === '/api/config' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const newCfg = JSON.parse(body || '{}');
-        const tokenChanged = newCfg.dhanAccessToken && newCfg.dhanAccessToken !== config.dhanAccessToken;
-        config = { ...config, ...newCfg };
-        if (tokenChanged) {
-          expiryCache.clear();
-          intradayCache.clear();
-          dhanCooldownUntil = 0;
-          Object.values(state.symbols).forEach(s => {
-            s.hasReceivedLive = false;
-            s.isLive = false;
-            s.hasLoadedIntradayOverview = false;
-            s.history = [];
-          });
-          addLog('🔑 Dhan token updated. Expiry cache and charts reset to live feed.');
-        }
-        saveConfig();
-        addLog(`⚙️ Configuration updated. Telegram alerts: ${config.telegramAlertsEnabled ? 'ENABLED' : 'OFF'}`);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'success', message: 'Settings saved successfully!' }));
-      } catch (err) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'error', message: err.message }));
+  if (pathname === '/api/config' && req.method === 'POST') {
+    try {
+      const newCfg = await readJsonBody(req);
+      const tokenChanged = newCfg.dhanAccessToken && newCfg.dhanAccessToken !== config.dhanAccessToken;
+      config = { ...config, ...newCfg };
+      if (tokenChanged) {
+        expiryCache.clear();
+        intradayCache.clear();
+        dhanCooldownUntil = 0;
+        Object.values(state.symbols).forEach(s => {
+          s.hasReceivedLive = false;
+          s.isLive = false;
+          s.hasLoadedIntradayOverview = false;
+          s.history = [];
+        });
+        addLog('🔑 Dhan token updated. Expiry cache and charts reset to live feed.');
       }
-    });
+      saveConfig();
+      addLog(`⚙️ Configuration updated. Telegram alerts: ${config.telegramAlertsEnabled ? 'ENABLED' : 'OFF'}`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'success', message: 'Settings saved successfully!' }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'error', message: err.message }));
+    }
     return;
   }
 
-  if (req.url === '/api/telegram-messages' && req.method === 'GET') {
+  if (pathname === '/api/telegram-messages' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'success',
@@ -1420,7 +1557,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.url === '/api/clear-messages' && req.method === 'POST') {
+  if (pathname === '/api/clear-messages' && req.method === 'POST') {
     state.telegramMessages = [];
     state.alerts = [];
     addLog('🗑️ Telegram message and alert history cleared.');
@@ -1429,188 +1566,179 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.url === '/api/send-symbol-report' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body || '{}');
-        const symName = (payload.symbol || 'RELIANCE').toUpperCase().trim();
-        const sym = state.symbols[symName] || config.watchlist.find(w => w.name === symName) || {
-          name: symName,
-          spotPrice: 2980.50,
-          atmStrike: 2980,
-          straddlePrice: 62.40,
-          prevDayHighStraddle: 59.00,
-          ceLtp: 34.20,
-          peLtp: 28.20,
-          segment: 'NSE_EQ',
-          crossoverEvents: []
-        };
+  if (pathname === '/api/send-symbol-report' && req.method === 'POST') {
+    try {
+      const payload = await readJsonBody(req);
+      const symName = (payload.symbol || 'RELIANCE').toUpperCase().trim();
+      const sym = state.symbols[symName] || config.watchlist.find(w => w.name === symName) || {
+        name: symName,
+        spotPrice: 2980.50,
+        atmStrike: 2980,
+        straddlePrice: 62.40,
+        prevDayHighStraddle: 59.00,
+        ceLtp: 34.20,
+        peLtp: 28.20,
+        segment: 'NSE_EQ',
+        crossoverEvents: []
+      };
 
-        const todayStr = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'full' });
-        const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
-        const pdh = sym.prevDayHighStraddle || sym.prevCloseStraddle || 1;
-        const straddlePrice = sym.straddlePrice || 0;
-        const spot = sym.spotPrice || 0;
-        const atm = sym.atmStrike || 0;
-        const ce = sym.ceLtp != null ? sym.ceLtp : (straddlePrice * 0.52).toFixed(2);
-        const pe = sym.peLtp != null ? sym.peLtp : (straddlePrice * 0.48).toFixed(2);
-        const totalPremium = (Number(ce) + Number(pe)) || straddlePrice || 1;
-        const cePct = ((Number(ce) / totalPremium) * 100).toFixed(1);
-        const pePct = ((Number(pe) / totalPremium) * 100).toFixed(1);
-        const skewBias = Number(ce) > Number(pe) * 1.08 ? 'Call Bias / Bullish' : (Number(pe) > Number(ce) * 1.08 ? 'Put Bias / Bearish' : 'Neutral Equilibrium');
+      const todayStr = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'full' });
+      const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+      const pdh = sym.prevDayHighStraddle || sym.prevCloseStraddle || 1;
+      const straddlePrice = sym.straddlePrice || 0;
+      const spot = sym.spotPrice || 0;
+      const atm = sym.atmStrike || 0;
+      const ce = sym.ceLtp != null ? sym.ceLtp : (straddlePrice * 0.52).toFixed(2);
+      const pe = sym.peLtp != null ? sym.peLtp : (straddlePrice * 0.48).toFixed(2);
+      const totalPremium = (Number(ce) + Number(pe)) || straddlePrice || 1;
+      const cePct = ((Number(ce) / totalPremium) * 100).toFixed(1);
+      const pePct = ((Number(pe) / totalPremium) * 100).toFixed(1);
+      const skewBias = Number(ce) > Number(pe) * 1.08 ? 'Call Bias / Bullish' : (Number(pe) > Number(ce) * 1.08 ? 'Put Bias / Bearish' : 'Neutral Equilibrium');
 
-        const isAbove = straddlePrice > pdh;
-        const diffPct = (((straddlePrice - pdh) / pdh) * 100).toFixed(2);
-        const crossCount = (sym.crossoverEvents || []).length;
-        const maxPeak = Math.max(...(sym.crossoverEvents || []).map(e => e.peakPrice || 0), straddlePrice, sym.dayHighStraddle || 0);
-        const peakGain = (((maxPeak - pdh) / pdh) * 100).toFixed(2);
-        
-        const histPrices = (sym.history || []).map(h => h.price).filter(p => p > 0);
-        const minStraddle = histPrices.length > 0 ? Math.min(...histPrices) : (straddlePrice * 0.95).toFixed(2);
-        const spread = (maxPeak - minStraddle).toFixed(2);
-        const priorityCommodities = ['CRUDEOIL', 'GOLD', 'NATURALGAS', 'SILVER', 'COPPER'];
-        const isCommodity = sym.segment === 'MCX_COMM' || priorityCommodities.includes(symName);
+      const isAbove = straddlePrice > pdh;
+      const diffPct = (((straddlePrice - pdh) / pdh) * 100).toFixed(2);
+      const crossCount = (sym.crossoverEvents || []).length;
+      const maxPeak = Math.max(...(sym.crossoverEvents || []).map(e => e.peakPrice || 0), straddlePrice, sym.dayHighStraddle || 0);
+      const peakGain = (((maxPeak - pdh) / pdh) * 100).toFixed(2);
+      
+      const histPrices = (sym.history || []).map(h => h.price).filter(p => p > 0);
+      const minStraddle = histPrices.length > 0 ? Math.min(...histPrices) : (straddlePrice * 0.95).toFixed(2);
+      const spread = (maxPeak - minStraddle).toFixed(2);
+      const priorityCommodities = ['CRUDEOIL', 'GOLD', 'NATURALGAS', 'SILVER', 'COPPER'];
+      const isCommodity = sym.segment === 'MCX_COMM' || priorityCommodities.includes(symName);
 
-        let crossoverText = '';
-        if ((sym.crossoverEvents || []).length > 0) {
-          sym.crossoverEvents.forEach(evt => {
-            const dipInfo = evt.dipTime ? `➔ Retraced below @ ${evt.dipTime}` : `➔ <b>Active Above Boundary</b> 🟢`;
-            crossoverText += `  ▫️ <b>Cycle #${evt.crossNum}</b> @ <b>${evt.startTime}</b>: Triggered ₹${evt.startPrice} (Peak: ₹${evt.peakPrice}) ${dipInfo}\n`;
-          });
-        } else {
-          crossoverText = `  <i>• No PDH boundary crossover recorded yet today (Normal Theta Contraction).</i>\n`;
-        }
-
-        const telegramMsg = `╔════════════════════════════════════════╗\n` +
-          `📊 <b>INDIVIDUAL ASSET INTELLIGENCE REPORT</b>\n` +
-          `╚════════════════════════════════════════╝\n\n` +
-          `🏛️ <b>ASSET:</b> <b>${symName}</b> (ATM ${atm})\n` +
-          `🏷️ <b>SEGMENT:</b> <b>[${isCommodity ? '🛢️ MCX Commodity' : '🏢 NSE F&O'}]</b>\n` +
-          `📅 <b>DATE:</b> ${todayStr} | ⏰ <b>TIME:</b> ${timeStr} IST\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `💰 <b>STRADDLE & OPTION PRICING:</b>\n` +
-          `• 🎯 <b>Live Straddle (LTP):</b> <b>₹${straddlePrice}</b>\n` +
-          `• 🟢 <b>Call Option (CE):</b> ₹${ce}\n` +
-          `• 🔴 <b>Put Option (PE):</b> ₹${pe}\n` +
-          `• ⚖️ <b>CE/PE Skew Ratio:</b> ${cePct}% CE vs ${pePct}% PE (<i>${skewBias}</i>)\n` +
-          `• 💵 <b>Underlying Cash Spot:</b> ₹${spot}\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `📌 <b>BOUNDARY & BREAKOUT ANALYSIS:</b>\n` +
-          `• 🧱 <b>PDH Boundary Level:</b> <b>₹${pdh}</b>\n` +
-          `• 📐 <b>Distance to Boundary:</b> <b>${diffPct >= 0 ? '+' : ''}${diffPct}%</b>\n` +
-          `• 🚦 <b>Boundary State:</b> ${isAbove ? '🟢 <b>ACTIVE RUNNER (Above Boundary)</b>' : '🔴 <b>BELOW BOUNDARY (Normal Theta Decay)</b>'}\n` +
-          `• 🔥 <b>Boundary Crossovers Today:</b> <b>${crossCount} time${crossCount === 1 ? '' : 's'}</b>\n` +
-          `• 🚀 <b>Day's Peak Straddle:</b> <code>₹${maxPeak}</code> (${peakGain >= 0 ? '+' : ''}${peakGain}% vs PDH)\n` +
-          `• 📊 <b>Day Range:</b> ₹${minStraddle} - ₹${maxPeak} (Spread: ₹${spread})\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `📋 <b>TIMELINE & RETEST CYCLES:</b>\n` +
-          `${crossoverText}\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `<i>Dhan Straddle Pro • On-Demand Asset Intelligence Dispatch</i>`;
-
-        addLog(`📲 [STOCK REPORT] Dispatched on-demand comprehensive report for ${symName} to Telegram.`);
-
-        const resResult = await sendTelegramAlert(telegramMsg, {
-          symbol: symName,
-          atmStrike: atm,
-          straddlePrice: straddlePrice,
-          prevDayHighStraddle: pdh,
-          crossNum: crossCount,
-          pctMove: `${diffPct >= 0 ? '+' : ''}${diffPct}%`,
-          spot: spot,
-          type: 'STOCK REPORT'
+      let crossoverText = '';
+      if ((sym.crossoverEvents || []).length > 0) {
+        sym.crossoverEvents.forEach(evt => {
+          const dipInfo = evt.dipTime ? `➔ Retraced below @ ${evt.dipTime}` : `➔ <b>Active Above Boundary</b> 🟢`;
+          crossoverText += `  ▫️ <b>Cycle #${evt.crossNum}</b> @ <b>${escapeHtml(evt.startTime)}</b>: Triggered ₹${evt.startPrice} (Peak: ₹${evt.peakPrice}) ${dipInfo}\n`;
         });
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'success', symbol: symName, result: resResult, message: `Report for ${symName} sent to Telegram` }));
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'error', error: err.message }));
+      } else {
+        crossoverText = `  <i>• No PDH boundary crossover recorded yet today (Normal Theta Contraction).</i>\n`;
       }
-    });
+
+      const telegramMsg = `╔════════════════════════════════════════╗\n` +
+        `📊 <b>INDIVIDUAL ASSET INTELLIGENCE REPORT</b>\n` +
+        `╚════════════════════════════════════════╝\n\n` +
+        `🏛️ <b>ASSET:</b> <b>${escapeHtml(symName)}</b> (ATM ${atm})\n` +
+        `🏷️ <b>SEGMENT:</b> <b>[${isCommodity ? '🛢️ MCX Commodity' : '🏢 NSE F&O'}]</b>\n` +
+        `📅 <b>DATE:</b> ${todayStr} | ⏰ <b>TIME:</b> ${timeStr} IST\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `💰 <b>STRADDLE & OPTION PRICING:</b>\n` +
+        `• 🎯 <b>Live Straddle (LTP):</b> <b>₹${straddlePrice}</b>\n` +
+        `• 🟢 <b>Call Option (CE):</b> ₹${ce}\n` +
+        `• 🔴 <b>Put Option (PE):</b> ₹${pe}\n` +
+        `• ⚖️ <b>CE/PE Skew Ratio:</b> ${cePct}% CE vs ${pePct}% PE (<i>${skewBias}</i>)\n` +
+        `• 💵 <b>Underlying Cash Spot:</b> ₹${spot}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📌 <b>BOUNDARY & BREAKOUT ANALYSIS:</b>\n` +
+        `• 🧱 <b>PDH Boundary Level:</b> <b>₹${pdh}</b>\n` +
+        `• 📐 <b>Distance to Boundary:</b> <b>${diffPct >= 0 ? '+' : ''}${diffPct}%</b>\n` +
+        `• 🚦 <b>Boundary State:</b> ${isAbove ? '🟢 <b>ACTIVE RUNNER (Above Boundary)</b>' : '🔴 <b>BELOW BOUNDARY (Normal Theta Decay)</b>'}\n` +
+        `• 🔥 <b>Boundary Crossovers Today:</b> <b>${crossCount} time${crossCount === 1 ? '' : 's'}</b>\n` +
+        `• 🚀 <b>Day's Peak Straddle:</b> <code>₹${maxPeak}</code> (${peakGain >= 0 ? '+' : ''}${peakGain}% vs PDH)\n` +
+        `• 📊 <b>Day Range:</b> ₹${minStraddle} - ₹${maxPeak} (Spread: ₹${spread})\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📋 <b>TIMELINE & RETEST CYCLES:</b>\n` +
+        `${crossoverText}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `<i>Dhan Straddle Pro • On-Demand Asset Intelligence Dispatch</i>`;
+
+      addLog(`📲 [STOCK REPORT] Dispatched on-demand comprehensive report for ${symName} to Telegram.`);
+
+      const resResult = await sendTelegramAlert(telegramMsg, {
+        symbol: symName,
+        atmStrike: atm,
+        straddlePrice: straddlePrice,
+        prevDayHighStraddle: pdh,
+        crossNum: crossCount,
+        pctMove: `${diffPct >= 0 ? '+' : ''}${diffPct}%`,
+        spot: spot,
+        type: 'STOCK REPORT'
+      });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'success', symbol: symName, result: resResult, message: `Report for ${symName} sent to Telegram` }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'error', error: err.message }));
+    }
     return;
   }
 
-  if (req.url === '/api/send-test-breakout' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body || '{}');
-        const symName = (payload.symbol || 'RELIANCE').toUpperCase().trim();
-        const symData = state.symbols[symName] || {
-          spotPrice: 2980.50,
-          atmStrike: 2980,
-          straddlePrice: 62.40,
-          prevDayHighStraddle: 59.00,
-          ceLtp: 34.20,
-          peLtp: 28.20
-        };
+  if (pathname === '/api/send-test-breakout' && req.method === 'POST') {
+    try {
+      const payload = await readJsonBody(req);
+      const symName = (payload.symbol || 'RELIANCE').toUpperCase().trim();
+      const symData = state.symbols[symName] || {
+        spotPrice: 2980.50,
+        atmStrike: 2980,
+        straddlePrice: 62.40,
+        prevDayHighStraddle: 59.00,
+        ceLtp: 34.20,
+        peLtp: 28.20
+      };
 
-        const straddlePrice = payload.straddlePrice != null ? Number(payload.straddlePrice) : (symData.straddlePrice || 62.40);
-        const pdh = payload.prevDayHighStraddle != null ? Number(payload.prevDayHighStraddle) : (symData.prevDayHighStraddle || 59.00);
-        const crossNum = Number(payload.crossNum) || (symData.crossoverEvents ? symData.crossoverEvents.length + 1 : 1);
-        const spot = payload.spot != null ? Number(payload.spot) : (symData.spotPrice || 2980.50);
-        const atmStrike = payload.atmStrike != null ? Number(payload.atmStrike) : (symData.atmStrike || 2980);
-        const pctMove = pdh > 0 ? (((straddlePrice - pdh) / pdh) * 100).toFixed(2) : '5.76';
-        const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+      const straddlePrice = payload.straddlePrice != null ? Number(payload.straddlePrice) : (symData.straddlePrice || 62.40);
+      const pdh = payload.prevDayHighStraddle != null ? Number(payload.prevDayHighStraddle) : (symData.prevDayHighStraddle || 59.00);
+      const crossNum = Number(payload.crossNum) || (symData.crossoverEvents ? symData.crossoverEvents.length + 1 : 1);
+      const spot = payload.spot != null ? Number(payload.spot) : (symData.spotPrice || 2980.50);
+      const atmStrike = payload.atmStrike != null ? Number(payload.atmStrike) : (symData.atmStrike || 2980);
+      const pctMove = pdh > 0 ? (((straddlePrice - pdh) / pdh) * 100).toFixed(2) : '5.76';
+      const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
 
-        const telegramMsg = `╔══════════════════════════╗\n` +
-          `   🚀 <b>PREVIOUS DAY HIGH BREAKOUT</b> 🟢\n` +
-          `╚══════════════════════════╝\n\n` +
-          `🏛️ <b>ASSET:</b> 🟢 <b>${symName}</b> (ATM ${atmStrike})\n` +
-          `⚡ <b>TRIGGER:</b> Live Straddle crossed Previous Day High!\n\n` +
-          `💰 <b>STRADDLE PRICE:</b> <code>₹${straddlePrice}</code> (<b>+${pctMove}%</b> above PDH 🟢)\n` +
-          `├─ 🟢 <b>Call (CE):</b> ₹${symData.ceLtp ?? '34.20'}\n` +
-          `└─ 🔴 <b>Put (PE):</b> ₹${symData.peLtp ?? '28.20'}\n\n` +
-          `📌 <b>Prev Day High (PDH):</b> ₹${pdh}\n` +
-          `🎯 <b>Underlying Cash:</b> ₹${spot}\n` +
-          `⏰ <b>Cross Time:</b> ${timeStr} IST (Crossover #${crossNum})\n` +
-          `🔔 <b>Status:</b> LIVE ALERT DISPATCH\n\n` +
-          `━━━━━━━━━━━━━━━━━━━━\n` +
-          `<i>Dhan Option Chain • Live PDH Breakout Engine</i>`;
+      const telegramMsg = `╔══════════════════════════╗\n` +
+        `   🚀 <b>PREVIOUS DAY HIGH BREAKOUT</b> 🟢\n` +
+        `╚══════════════════════════╝\n\n` +
+        `🏛️ <b>ASSET:</b> 🟢 <b>${escapeHtml(symName)}</b> (ATM ${atmStrike})\n` +
+        `⚡ <b>TRIGGER:</b> Live Straddle crossed Previous Day High!\n\n` +
+        `💰 <b>STRADDLE PRICE:</b> <code>₹${straddlePrice}</code> (<b>+${pctMove}%</b> above PDH 🟢)\n` +
+        `├─ 🟢 <b>Call (CE):</b> ₹${symData.ceLtp ?? '34.20'}\n` +
+        `└─ 🔴 <b>Put (PE):</b> ₹${symData.peLtp ?? '28.20'}\n\n` +
+        `📌 <b>Prev Day High (PDH):</b> ₹${pdh}\n` +
+        `🎯 <b>Underlying Cash:</b> ₹${spot}\n` +
+        `⏰ <b>Cross Time:</b> ${timeStr} IST (Crossover #${crossNum})\n` +
+        `🔔 <b>Status:</b> LIVE ALERT DISPATCH\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `<i>Dhan Option Chain • Live PDH Breakout Engine</i>`;
 
-        addLog(`🧪 [ALERT DISPATCH] Generated Breakout Alert for ${symName} (Cross #${crossNum}, Straddle ₹${straddlePrice} > PDH ₹${pdh} (+${pctMove}%))...`);
+      addLog(`🧪 [ALERT DISPATCH] Generated Breakout Alert for ${symName} (Cross #${crossNum}, Straddle ₹${straddlePrice} > PDH ₹${pdh} (+${pctMove}%))...`);
 
-        const resResult = await sendTelegramAlert(telegramMsg, {
-          symbol: symName,
-          atmStrike: atmStrike,
-          straddlePrice: straddlePrice,
-          prevDayHighStraddle: pdh,
-          crossNum: crossNum,
-          pctMove: `+${pctMove}%`,
-          spot: spot,
-          type: 'PDH BREAKOUT'
-        });
+      const resResult = await sendTelegramAlert(telegramMsg, {
+        symbol: symName,
+        atmStrike: atmStrike,
+        straddlePrice: straddlePrice,
+        prevDayHighStraddle: pdh,
+        crossNum: crossNum,
+        pctMove: `+${pctMove}%`,
+        spot: spot,
+        type: 'PDH BREAKOUT'
+      });
 
-        // Also record in state.alerts
-        state.alerts.unshift({
-          id: Date.now(),
-          timestamp: timeStr,
-          symbol: symName,
-          atmStrike: atmStrike,
-          straddlePrice: straddlePrice,
-          prevDayHighStraddle: pdh,
-          pctMove: pctMove,
-          spot: spot,
-          isLive: true,
-          crossNum: crossNum
-        });
-        if (state.alerts.length > 50) state.alerts.pop();
+      state.alerts.unshift({
+        id: Date.now(),
+        timestamp: timeStr,
+        symbol: symName,
+        atmStrike: atmStrike,
+        straddlePrice: straddlePrice,
+        prevDayHighStraddle: pdh,
+        pctMove: pctMove,
+        spot: spot,
+        isLive: true,
+        crossNum: crossNum
+      });
+      if (state.alerts.length > 50) state.alerts.pop();
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'success', result: resResult, message: 'Breakout alert dispatched' }));
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'error', message: err.message }));
-      }
-    });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'success', result: resResult, message: 'Breakout alert dispatched' }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'error', message: err.message }));
+    }
     return;
   }
 
-  if (req.url === '/api/status' && req.method === 'GET') {
+  if (pathname === '/api/status' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       configSummary: {
@@ -1630,57 +1758,52 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.url === '/api/test-connection' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', async () => {
-      try {
-        const { dhanClientId, dhanAccessToken, telegramBotToken, telegramChatId } = JSON.parse(body || '{}');
-        
-        let dhanResult = { status: 'failed', message: 'Not tested' };
-        if (dhanAccessToken && dhanClientId) {
-          const dRes = await fetch('https://api.dhan.co/v2/fundlimit', {
-            headers: { 'access-token': dhanAccessToken.trim(), 'client-id': dhanClientId.trim() }
-          });
-          if (dRes.ok) {
-            const dData = await dRes.json();
-            dhanResult = { status: 'success', message: `Connected! Available Cash: ₹${dData.availabelBalance ?? dData.availableBalance}` };
-          } else {
-            const errText = await dRes.text();
-            dhanResult = { status: 'failed', message: `Dhan HTTP ${dRes.status}: ${errText}` };
-          }
+  if (pathname === '/api/test-connection' && req.method === 'POST') {
+    try {
+      const { dhanClientId, dhanAccessToken, telegramBotToken, telegramChatId } = await readJsonBody(req);
+      
+      let dhanResult = { status: 'failed', message: 'Not tested' };
+      if (dhanAccessToken && dhanClientId) {
+        const dRes = await safeFetch('https://api.dhan.co/v2/fundlimit', {
+          headers: { 'access-token': dhanAccessToken.trim(), 'client-id': dhanClientId.trim() }
+        }, 5000);
+        if (dRes.ok) {
+          const dData = await dRes.json();
+          dhanResult = { status: 'success', message: `Connected! Available Cash: ₹${dData.availabelBalance ?? dData.availableBalance}` };
+        } else {
+          const errText = await dRes.text();
+          dhanResult = { status: 'failed', message: `Dhan HTTP ${dRes.status}: ${errText}` };
         }
-
-        let telegramResult = { status: 'failed', message: 'Not tested' };
-        if (telegramBotToken && telegramChatId) {
-          const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: telegramChatId, text: '✅ Bloomberg Terminal Web App: Telegram Connection Test Successful!' })
-          });
-          if (tgRes.ok) {
-            telegramResult = { status: 'success', message: 'Message delivered to Telegram!' };
-          } else {
-            const tgErr = await tgRes.text();
-            telegramResult = { status: 'failed', message: `Telegram error: ${tgErr}` };
-          }
-        }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ dhan: dhanResult, telegram: telegramResult }));
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'error', message: err.message }));
       }
-    });
+
+      let telegramResult = { status: 'failed', message: 'Not tested' };
+      if (telegramBotToken && telegramChatId) {
+        const tgRes = await safeFetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: telegramChatId, text: '✅ Bloomberg Terminal Web App: Telegram Connection Test Successful!' })
+        }, 5000);
+        if (tgRes.ok) {
+          telegramResult = { status: 'success', message: 'Message delivered to Telegram!' };
+        } else {
+          const tgErr = await tgRes.text();
+          telegramResult = { status: 'failed', message: `Telegram error: ${tgErr}` };
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ dhan: dhanResult, telegram: telegramResult }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'error', message: err.message }));
+    }
     return;
   }
 
   // Serve static files
-  // Strip query string / hash (e.g. app.js?v=123) and block path traversal
   let reqPath = '/';
   try {
-    reqPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+    reqPath = decodeURIComponent(pathname);
   } catch (e) {
     reqPath = '/';
   }
@@ -1709,6 +1832,15 @@ const server = http.createServer(async (req, res) => {
       res.end(content, 'utf-8');
     }
   });
+});
+
+// Process safety crash handlers
+process.on('uncaughtException', (err) => {
+  console.error('🚨 [PROCESS UNCAUGHT EXCEPTION]:', err.message);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('🚨 [PROCESS UNHANDLED REJECTION]:', reason);
 });
 
 server.listen(PORT, () => {

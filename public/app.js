@@ -1,10 +1,27 @@
 // ==========================================
-// 🔒 PIN AUTHENTICATION & 5-MIN LOCKOUT SYSTEM
+// 🔒 SERVER-VERIFIED PIN AUTHENTICATION
 // ==========================================
-const TERMINAL_PIN = '2712';
-const MAX_PIN_ATTEMPTS = 3;
-const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 let lockoutInterval = null;
+
+// Bloomberg Non-Blocking Toast System
+function showToast(msg, type = 'success') {
+  let container = document.querySelector('.bb-toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'bb-toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = `bb-toast ${type}`;
+  const icon = type === 'success' ? '⚡' : (type === 'error' ? '❌' : '⚠️');
+  toast.innerHTML = `<span>${icon}</span> <span>${msg}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => toast.classList.add('show'), 10);
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
 
 function checkTerminalAuth() {
   const isAuth = sessionStorage.getItem('terminal_auth') === 'true';
@@ -55,11 +72,9 @@ function resetPinInputUI() {
     pinInput.value = '';
   }
 
-  const failCount = parseInt(localStorage.getItem('terminal_fail_count') || '0', 10);
-  const remaining = Math.max(0, MAX_PIN_ATTEMPTS - failCount);
   if (attemptsLabel) {
-    attemptsLabel.textContent = `Attempts remaining: ${remaining} / ${MAX_PIN_ATTEMPTS}`;
-    attemptsLabel.style.color = remaining <= 1 ? '#FF5252' : 'var(--bb-text-muted)';
+    attemptsLabel.textContent = `Enter your 4-digit security PIN`;
+    attemptsLabel.style.color = 'var(--bb-text-muted)';
   }
 }
 
@@ -74,7 +89,7 @@ function triggerLockoutState(blockUntil) {
   if (errorEl) errorEl.style.display = 'none';
   if (lockoutBox) lockoutBox.style.display = 'flex';
   if (attemptsLabel) {
-    attemptsLabel.textContent = '🔒 Security Lockout Active (3 Failed Attempts)';
+    attemptsLabel.textContent = '🔒 Security Lockout Active (Failed Attempts)';
     attemptsLabel.style.color = '#FF5252';
   }
 
@@ -83,7 +98,6 @@ function triggerLockoutState(blockUntil) {
     if (remainingMs <= 0) {
       if (lockoutInterval) clearInterval(lockoutInterval);
       lockoutInterval = null;
-      localStorage.removeItem('terminal_fail_count');
       localStorage.removeItem('terminal_block_until');
       resetPinInputUI();
       const pinInput = document.getElementById('pinInput');
@@ -102,7 +116,7 @@ function triggerLockoutState(blockUntil) {
   lockoutInterval = setInterval(updateTimer, 1000);
 }
 
-function verifyPin() {
+async function verifyPin() {
   const blockUntil = parseInt(localStorage.getItem('terminal_block_until') || '0', 10);
   if (blockUntil > Date.now()) {
     triggerLockoutState(blockUntil);
@@ -123,47 +137,50 @@ function verifyPin() {
     return;
   }
 
-  if (val === TERMINAL_PIN) {
-    sessionStorage.setItem('terminal_auth', 'true');
-    localStorage.removeItem('terminal_fail_count');
-    localStorage.removeItem('terminal_block_until');
-    if (modal) modal.style.display = 'none';
-    if (errorEl) errorEl.style.display = 'none';
-    
-    // Trigger initial data load
-    loadSettings();
-    fetchStatus();
-    return;
-  }
+  try {
+    const res = await fetch('/api/verify-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: val })
+    });
+    const data = await res.json();
 
-  // Incorrect PIN
-  let failCount = parseInt(localStorage.getItem('terminal_fail_count') || '0', 10) + 1;
-  localStorage.setItem('terminal_fail_count', failCount);
-
-  if (pinInput) {
-    pinInput.value = '';
-    pinInput.focus();
-  }
-
-  if (card) {
-    card.classList.add('shake');
-    setTimeout(() => card.classList.remove('shake'), 500);
-  }
-
-  if (failCount >= MAX_PIN_ATTEMPTS) {
-    const lockUntil = Date.now() + LOCKOUT_DURATION_MS;
-    localStorage.setItem('terminal_block_until', lockUntil);
-    triggerLockoutState(lockUntil);
-  } else {
-    const remaining = MAX_PIN_ATTEMPTS - failCount;
-    if (errorEl) {
-      errorEl.textContent = `❌ Incorrect PIN! ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`;
-      errorEl.style.display = 'block';
+    if (res.ok && data.ok) {
+      sessionStorage.setItem('terminal_auth', 'true');
+      if (data.token) sessionStorage.setItem('terminal_session', data.token);
+      localStorage.removeItem('terminal_block_until');
+      if (modal) modal.style.display = 'none';
+      if (errorEl) errorEl.style.display = 'none';
+      showToast('Authentication successful. Terminal unlocked!', 'success');
+      loadSettings();
+      fetchStatus();
+      return;
     }
-    const attemptsLabel = document.getElementById('pinAttemptsLabel');
-    if (attemptsLabel) {
-      attemptsLabel.textContent = `Attempts remaining: ${remaining} / ${MAX_PIN_ATTEMPTS}`;
-      attemptsLabel.style.color = '#FF5252';
+
+    // Invalid PIN or Lockout
+    if (pinInput) {
+      pinInput.value = '';
+      pinInput.focus();
+    }
+    if (card) {
+      card.classList.add('shake');
+      setTimeout(() => card.classList.remove('shake'), 500);
+    }
+
+    if (data.locked) {
+      const lockUntil = Date.now() + (data.remainingSecs || 300) * 1000;
+      localStorage.setItem('terminal_block_until', lockUntil);
+      triggerLockoutState(lockUntil);
+    } else {
+      if (errorEl) {
+        errorEl.textContent = `❌ ${data.message || 'Incorrect PIN!'}`;
+        errorEl.style.display = 'block';
+      }
+    }
+  } catch (err) {
+    if (errorEl) {
+      errorEl.textContent = `Connection error: ${err.message}`;
+      errorEl.style.display = 'block';
     }
   }
 }
@@ -2033,53 +2050,59 @@ function renderQuantBloombergCanvas() {
   const peakPoints = topItems.map(s => s.maxPeakPct);
   const bgColors = dataPoints.map(v => v >= 0 ? '#00E676' : '#FF3D57');
 
-  if (quantBloombergChartInstance) quantBloombergChartInstance.destroy();
-
-  quantBloombergChartInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: 'Live % Move from PDH',
-          data: dataPoints,
-          backgroundColor: bgColors,
-          borderRadius: 4,
-          barThickness: 16
+  if (quantBloombergChartInstance) {
+    quantBloombergChartInstance.data.labels = labels;
+    quantBloombergChartInstance.data.datasets[0].data = dataPoints;
+    quantBloombergChartInstance.data.datasets[0].backgroundColor = bgColors;
+    quantBloombergChartInstance.data.datasets[1].data = peakPoints;
+    quantBloombergChartInstance.update('none');
+  } else {
+    quantBloombergChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Live % Move from PDH',
+            data: dataPoints,
+            backgroundColor: bgColors,
+            borderRadius: 4,
+            barThickness: 16
+          },
+          {
+            label: 'Intraday Peak Spike %',
+            data: peakPoints,
+            backgroundColor: '#FFD700',
+            borderRadius: 4,
+            barThickness: 6
+          }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#FFF', font: { weight: 'bold' } } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw}%`
+            }
+          }
         },
-        {
-          label: 'Intraday Peak Spike %',
-          data: peakPoints,
-          backgroundColor: '#FFD700',
-          borderRadius: 4,
-          barThickness: 6
-        }
-      ]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { labels: { color: '#FFF', font: { weight: 'bold' } } },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw}%`
+        scales: {
+          x: {
+            grid: { color: 'rgba(255, 255, 255, 0.08)' },
+            ticks: { color: '#94A3B8', callback: (v) => `${v}%` }
+          },
+          y: {
+            grid: { display: false },
+            ticks: { color: '#FFF', font: { weight: 'bold', size: 11 } }
           }
         }
-      },
-      scales: {
-        x: {
-          grid: { color: 'rgba(255, 255, 255, 0.08)' },
-          ticks: { color: '#94A3B8', callback: (v) => `${v}%` }
-        },
-        y: {
-          grid: { display: false },
-          ticks: { color: '#FFF', font: { weight: 'bold', size: 11 } }
-        }
       }
-    }
-  });
+    });
+  }
 }
 
 // Start Live Status Polling
