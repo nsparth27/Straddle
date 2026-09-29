@@ -202,8 +202,73 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Global State
+// Global State & Comprehensive Company Aliases
 let lastSymbolsMap = {};
+
+const COMPANY_NAMES = {
+  'SAIL': 'Steel Authority of India Limited',
+  'TATASTEEL': 'Tata Steel Limited',
+  'JSWSTEEL': 'JSW Steel Limited',
+  'JINDALSTEL': 'Jindal Steel & Power Limited',
+  'SBIN': 'State Bank of India',
+  'TATAMOTORS': 'Tata Motors Limited',
+  'TCS': 'Tata Consultancy Services',
+  'RELIANCE': 'Reliance Industries Limited',
+  'HDFCBANK': 'HDFC Bank Limited',
+  'ICICIBANK': 'ICICI Bank Limited',
+  'INFY': 'Infosys Limited',
+  'ITC': 'ITC Limited',
+  'LT': 'Larsen & Toubro Limited',
+  'HINDALCO': 'Hindalco Industries Limited',
+  'VEDL': 'Vedanta Limited',
+  'COALINDIA': 'Coal India Limited',
+  'ONGC': 'Oil & Natural Gas Corporation',
+  'IOC': 'Indian Oil Corporation',
+  'BPCL': 'Bharat Petroleum Corporation',
+  'HPCL': 'Hindustan Petroleum Corporation',
+  'GAIL': 'GAIL (India) Limited',
+  'NTPC': 'NTPC Limited',
+  'POWERGRID': 'Power Grid Corporation of India',
+  'BHEL': 'Bharat Heavy Electricals Limited',
+  'BEL': 'Bharat Electronics Limited',
+  'HAL': 'Hindustan Aeronautics Limited',
+  'NMDC': 'National Mineral Development Corporation',
+  'NATIONALUM': 'National Aluminium Company',
+  'M&M': 'Mahindra & Mahindra Limited',
+  'MARUTI': 'Maruti Suzuki India Limited',
+  'BAJFINANCE': 'Bajaj Finance Limited',
+  'BAJAJFINSV': 'Bajaj Finserv Limited',
+  'BHARTIARTL': 'Bharti Airtel Limited',
+  'SUNPHARMA': 'Sun Pharmaceutical Industries',
+  'CIPLA': 'Cipla Limited',
+  'DRREDDY': 'Dr. Reddy\'s Laboratories',
+  'DIVISLAB': 'Divi\'s Laboratories',
+  'WIPRO': 'Wipro Limited',
+  'HCLTECH': 'HCL Technologies Limited',
+  'TECHM': 'Tech Mahindra Limited',
+  'TITAN': 'Titan Company Limited',
+  'ULTRACEMCO': 'UltraTech Cement Limited',
+  'GRASIM': 'Grasim Industries Limited',
+  'ASIANPAINT': 'Asian Paints Limited',
+  'BRITANNIA': 'Britannia Industries Limited',
+  'NESTLEIND': 'Nestle India Limited',
+  'HINDUNILVR': 'Hindustan Unilever Limited',
+  'ADANIENT': 'Adani Enterprises Limited',
+  'ADANIPORTS': 'Adani Ports and SEZ',
+  'KOTAKBANK': 'Kotak Mahindra Bank',
+  'AXISBANK': 'Axis Bank Limited',
+  'INDUSINDBK': 'IndusInd Bank Limited',
+  'FEDERALBNK': 'Federal Bank Limited',
+  'IDFCFIRSTB': 'IDFC First Bank Limited',
+  'PNB': 'Punjab National Bank',
+  'BANKBARODA': 'Bank of Baroda',
+  'CANBK': 'Canara Bank',
+  'CRUDEOIL': 'MCX Crude Oil',
+  'NATURALGAS': 'MCX Natural Gas',
+  'GOLD': 'MCX Gold Futures',
+  'SILVER': 'MCX Silver Futures',
+  'COPPER': 'MCX Copper Futures'
+};
 
 function switchTab(tabId) {
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -526,7 +591,8 @@ function renderSymbolCard(sym, isMarketOpen) {
     card.innerHTML = `
       <div class="panel-header">
         <div class="panel-title" style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-          <span>${sym.name} STRADDLE</span>
+          <span style="font-weight: 900; letter-spacing: 0.5px;">${sym.name}</span>
+          ${COMPANY_NAMES[sym.name] ? `<span style="font-size: 0.72rem; color: var(--bb-text-muted); font-weight: 500; text-transform: capitalize;">(${COMPANY_NAMES[sym.name]})</span>` : ''}
           <button class="btn-sync-card" id="syncbtn-${sym.name}" onclick="manualSyncSymbol('${sym.name}', this)" title="Force sync with Dhan API">
             <span class="sync-icon">🔄</span> SYNC
           </button>
@@ -811,9 +877,15 @@ async function fetchStatus() {
     // 3. Filter Symbols based on Search & Category
     let symbolList = Object.values(symbolsMap);
 
-    // Apply Search filter
+    // Apply Search filter (matches both Ticker e.g. SAIL and full name e.g. Steel Authority)
     if (searchQuery) {
-      symbolList = symbolList.filter(s => s.name.toUpperCase().includes(searchQuery));
+      const q = searchQuery.toUpperCase();
+      symbolList = symbolList.filter(s => {
+        const nameMatch = s.name.toUpperCase().includes(q);
+        const comp = COMPANY_NAMES[s.name] || '';
+        const compMatch = comp.toUpperCase().includes(q);
+        return nameMatch || compMatch;
+      });
     }
 
     // Apply Category Filter
