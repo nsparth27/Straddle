@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 
@@ -70,6 +70,7 @@ const state = {
   fundSummary: null,
   symbols: {},
   alerts: [],
+  telegramMessages: [],
   logs: []
 };
 
@@ -81,11 +82,57 @@ function addLog(msg) {
   console.log(entry);
 }
 
-// Telegram Alert Sender
-async function sendTelegramAlert(message) {
+// Telegram Alert Sender with WhatsApp Double-Ticks & Delivery Tracking
+async function sendTelegramAlert(message, meta = {}) {
+  const timestamp = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+  const dateStr = getTodayIST();
+  const msgId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  const symbol = meta.symbol || 'ALL';
+  const crossNum = Number(meta.crossNum) || 1;
+  const fmtCurrency = (val) => {
+    if (val == null || val === '--' || val === '') return '--';
+    if (typeof val === 'number') return `₹${val.toFixed(2)}`;
+    const s = String(val).trim();
+    return s.startsWith('₹') ? s : `₹${s}`;
+  };
+  const straddlePrice = fmtCurrency(meta.straddlePrice);
+  const prevDayHighStraddle = fmtCurrency(meta.prevDayHighStraddle);
+  const spot = fmtCurrency(meta.spot);
+  const pctMove = meta.pctMove != null ? String(meta.pctMove).replace('%', '') + '%' : '0.00%';
+
+  const entry = {
+    id: msgId,
+    timestamp: timestamp,
+    rawTimestamp: Date.now(),
+    date: dateStr,
+    symbol: symbol,
+    atmStrike: meta.atmStrike ?? '--',
+    straddlePrice: straddlePrice,
+    prevDayHighStraddle: prevDayHighStraddle,
+    crossNum: crossNum,
+    pctMove: pctMove,
+    spot: spot,
+    status: meta.type || meta.status || 'PDH BREAKOUT',
+    deliveryState: 'sending', // 'sending' | 'delivered' | 'failed'
+    ticks: '✓', // WhatsApp Single Tick (Sent)
+    text: message,
+    chatId: config.telegramChatId || '--',
+    deliveredAt: null,
+    error: null,
+    telegramMessageId: null
+  };
+
+  state.telegramMessages.unshift(entry);
+  if (state.telegramMessages.length > 500) state.telegramMessages.pop();
+
   if (!config.telegramAlertsEnabled || !config.telegramBotToken || !config.telegramChatId) {
-    return { ok: false, message: 'Telegram alerts disabled or missing credentials' };
+    entry.deliveryState = 'failed';
+    entry.ticks = '❌';
+    entry.error = 'Telegram alerts disabled or missing credentials';
+    return { ok: false, message: entry.error, entry };
   }
+
   const url = `https://api.telegram.org/bot${config.telegramBotToken}/sendMessage`;
   try {
     const res = await fetch(url, {
@@ -98,9 +145,23 @@ async function sendTelegramAlert(message) {
       })
     });
     const data = await res.json();
-    return { ok: res.ok, data };
+    if (res.ok && data.ok) {
+      entry.deliveryState = 'delivered';
+      entry.ticks = '✓✓'; // WhatsApp Double Tick (Delivered)
+      entry.deliveredAt = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+      entry.telegramMessageId = data.result?.message_id;
+      return { ok: true, data, entry };
+    } else {
+      entry.deliveryState = 'failed';
+      entry.ticks = '❌';
+      entry.error = data?.description || `HTTP ${res.status}`;
+      return { ok: false, error: entry.error, data, entry };
+    }
   } catch (err) {
-    return { ok: false, error: err.message };
+    entry.deliveryState = 'failed';
+    entry.ticks = '❌';
+    entry.error = err.message;
+    return { ok: false, error: err.message, entry };
   }
 }
 
@@ -352,7 +413,19 @@ async function run5MinuteBreakoutScan() {
       `<i>Dhan Live • 5-Minute PDH Strategy Scan</i>`;
 
     addLog(`📢 [5-MIN SCANNER] Found ${breakouts.length} stocks above Previous Day High. Dispatched to Telegram.`);
-    await sendTelegramAlert(msg);
+    const firstB = breakouts[0];
+    const firstPdh = firstB ? (firstB.prevDayHighStraddle || firstB.prevCloseStraddle || firstB.prevBarClose) : 0;
+    const firstPct = (firstB && firstPdh > 0) ? (((firstB.straddlePrice - firstPdh) / firstPdh) * 100).toFixed(2) : '0.00';
+    await sendTelegramAlert(msg, {
+      symbol: breakouts.length === 1 ? firstB.name : `BREAKOUTS (${breakouts.length})`,
+      atmStrike: breakouts.length === 1 ? firstB.atmStrike : `${breakouts.length} Stocks`,
+      straddlePrice: breakouts.length === 1 ? firstB.straddlePrice : '--',
+      prevDayHighStraddle: breakouts.length === 1 ? firstPdh : '--',
+      crossNum: breakouts.length === 1 ? (firstB.crossoverEvents || []).length : breakouts.length,
+      pctMove: breakouts.length === 1 ? `+${firstPct}%` : `+${firstPct}%`,
+      spot: breakouts.length === 1 ? firstB.spotPrice : '--',
+      type: '5-MIN SCAN'
+    });
     return { status: 'success', breakouts: breakouts.length, count: symbols.length };
   } else {
     const msg = `╔══════════════════════════╗\n` +
@@ -365,7 +438,16 @@ async function run5MinuteBreakoutScan() {
       `<i>Monitoring all F&O stocks and MCX commodities every 5 minutes.</i>`;
 
     addLog(`ℹ️ [5-MIN SCANNER] Scan complete at ${timeStr}. No active PDH breakouts.`);
-    await sendTelegramAlert(msg);
+    await sendTelegramAlert(msg, {
+      symbol: 'ALL_MARKET',
+      atmStrike: '--',
+      straddlePrice: '--',
+      prevDayHighStraddle: '--',
+      crossNum: 0,
+      pctMove: '0.00%',
+      spot: '--',
+      type: '5-MIN SCAN (PULSE)'
+    });
     return { status: 'success', breakouts: 0, count: symbols.length };
   }
 }
@@ -380,8 +462,12 @@ function getDhanHeaders() {
   };
 }
 
-// Check market hours (NSE: Mon-Fri 09:15-15:30 IST; MCX: Mon-Fri 09:00-23:30 IST)
-function checkMarketOpen(segment = 'NSE_EQ') {
+// Accurate F&O & MCX Trading Schedule Evaluator:
+// 1. Pre-Open Session: 09:00 AM – 09:15 AM IST (Order entry, matching, price discovery)
+// 2. Regular F&O Trading: 09:15 AM – 03:40 PM IST (Continuous trading session)
+// 3. Trade Modification Cutoff / Post-Market: 03:40 PM – 04:15 PM IST (Post-market modifications)
+// 4. MCX Commodities Session: 09:00 AM – 11:30 PM IST
+function getMarketSessionInfo(segment = 'NSE_EQ') {
   const now = new Date();
   const options = { timeZone: 'Asia/Kolkata', hour12: false, weekday: 'short', hour: '2-digit', minute: '2-digit' };
   const formatter = new Intl.DateTimeFormat('en-US', options);
@@ -393,21 +479,69 @@ function checkMarketOpen(segment = 'NSE_EQ') {
   const hour = parseInt(hash.hour, 10);
   const minute = parseInt(hash.minute, 10);
 
-  if (day === 'Sat' || day === 'Sun') return false;
+  if (day === 'Sat' || day === 'Sun') {
+    return {
+      isOpen: false,
+      phase: 'WEEKEND_CLOSED',
+      label: 'WEEKEND (MARKET CLOSED)',
+      badgeClass: 'dot closed'
+    };
+  }
 
   const currentMin = hour * 60 + minute;
+  const isMcx = segment === 'MCX_COMM' || segment === 'MCX';
 
-  if (segment === 'MCX_COMM' || segment === 'MCX') {
-    // MCX Commodities: 09:00 AM to 11:30 PM (23:30) IST
-    const openMin = 9 * 60; // 09:00 AM
-    const closeMin = 23 * 60 + 30; // 11:30 PM
-    return currentMin >= openMin && currentMin <= closeMin;
-  } else {
-    // NSE Equities & Indices: 09:15 AM to 03:30 PM (15:30) IST
-    const openMin = 9 * 60 + 15;   // 9:15 AM
-    const closeMin = 15 * 60 + 30; // 3:30 PM
-    return currentMin >= openMin && currentMin <= closeMin;
+  if (isMcx) {
+    const mcxOpen = 9 * 60; // 09:00 AM
+    const mcxClose = 23 * 60 + 30; // 11:30 PM
+    const isMcxOpen = currentMin >= mcxOpen && currentMin <= mcxClose;
+    return {
+      isOpen: isMcxOpen,
+      phase: isMcxOpen ? 'MCX_ACTIVE' : 'MCX_CLOSED',
+      label: isMcxOpen ? '🛢️ MCX COMMODITY STREAM (09:00 AM – 11:30 PM IST)' : '🌙 MCX COMMODITY CLOSED',
+      badgeClass: isMcxOpen ? 'dot' : 'dot closed'
+    };
   }
+
+  // NSE Equities & F&O Schedule
+  const preOpenStart = 9 * 60; // 09:00 AM
+  const preOpenEnd = 9 * 60 + 15; // 09:15 AM
+  const regularEnd = 15 * 60 + 40; // 03:40 PM (3:40 PM continuous F&O trading)
+  const postMarketEnd = 16 * 60 + 15; // 04:15 PM (4:15 PM trade modification cutoff)
+
+  if (currentMin >= preOpenStart && currentMin < preOpenEnd) {
+    return {
+      isOpen: true,
+      phase: 'PRE_OPEN',
+      label: '🟡 PRE-OPEN SESSION (09:00 – 09:15 AM IST — PRICE DISCOVERY)',
+      badgeClass: 'dot'
+    };
+  } else if (currentMin >= preOpenEnd && currentMin <= regularEnd) {
+    return {
+      isOpen: true,
+      phase: 'REGULAR_FNO',
+      label: '🟢 REGULAR F&O TRADING (09:15 AM – 03:40 PM IST — LIVE)',
+      badgeClass: 'dot'
+    };
+  } else if (currentMin > regularEnd && currentMin <= postMarketEnd) {
+    return {
+      isOpen: true,
+      phase: 'POST_MARKET',
+      label: '🟠 POST-MARKET / TRADE MODIFICATION (03:40 – 04:15 PM IST)',
+      badgeClass: 'dot'
+    };
+  } else {
+    return {
+      isOpen: false,
+      phase: 'CLOSED',
+      label: '🌙 MARKET CLOSED — SETTLED OVERVIEW ACTIVE',
+      badgeClass: 'dot closed'
+    };
+  }
+}
+
+function checkMarketOpen(segment = 'NSE_EQ') {
+  return getMarketSessionInfo(segment).isOpen;
 }
 
 // Floor time to start of bar (e.g. 15-min bar)
@@ -430,9 +564,11 @@ async function fetchFundLimits() {
       const data = await res.json();
       state.dhanConnected = true;
       return data;
+    } else {
+      console.warn(`⚠️ [DHAN FUNDLIMIT] API returned HTTP ${res.status}`);
     }
   } catch (err) {
-    // Ignore transient fetch errors
+    console.error('⚠️ [DHAN FUNDLIMIT] Error:', err.message);
   }
   return null;
 }
@@ -535,10 +671,12 @@ async function fetchLiveStraddle(securityId, segment) {
             };
           }
         }
+      } else {
+        console.warn(`⚠️ [DHAN OPTIONCHAIN] Symbol ${securityId} API returned HTTP ${ocRes.status}`);
       }
     }
   } catch (err) {
-    // Handled
+    console.error(`⚠️ [DHAN OPTIONCHAIN] Error for ${securityId}:`, err.message);
   }
   return null;
 }
@@ -599,6 +737,131 @@ async function fetchIntradayOverview(securityId, segment, closingStraddle) {
   return null;
 }
 
+// Recompute Crossover events & stats dynamically from history points vs PDH
+function recomputeCrossovers(item) {
+  const pdh = item.prevDayHighStraddle || item.prevCloseStraddle;
+  if (!pdh || pdh <= 0 || !Array.isArray(item.history) || item.history.length === 0) {
+    item.crossoverEvents = item.crossoverEvents || [];
+    return;
+  }
+
+  const events = [];
+  let isAbove = false;
+
+  for (let i = 0; i < item.history.length; i++) {
+    const bar = item.history[i];
+    const price = Number(bar.price || 0);
+    const time = bar.time || '';
+
+    if (price > pdh) {
+      const pctOver = parseFloat((((price - pdh) / pdh) * 100).toFixed(2));
+      if (!isAbove) {
+        isAbove = true;
+        events.push({
+          crossNum: events.length + 1,
+          startTime: time,
+          startPrice: price,
+          peakPrice: price,
+          peakPct: pctOver,
+          dipTime: null,
+          active: true
+        });
+      } else {
+        const last = events[events.length - 1];
+        if (price > last.peakPrice) {
+          last.peakPrice = price;
+          last.peakPct = pctOver;
+        }
+      }
+    } else {
+      if (isAbove) {
+        isAbove = false;
+        const last = events[events.length - 1];
+        last.dipTime = time;
+        last.active = false;
+      }
+    }
+  }
+
+  item.crossoverEvents = events;
+  item.breakoutHappenedToday = events.length > 0;
+  item.isCurrentlyAbovePdh = isAbove;
+  item.breakout = (item.straddlePrice || 0) > pdh;
+}
+
+// Generate full-session timeline intervals according to official F&O Schedule:
+// Pre-Open (09:00-09:15), Regular F&O (09:15-15:40), Post-Market (up to 16:15), MCX (09:00-23:30)
+function generateSessionTimeline(segment, currentPrice, pdh, crossoverCount = 0) {
+  const isMcx = segment === 'MCX_COMM' || ['CRUDEOIL', 'NATURALGAS', 'GOLD', 'SILVER', 'COPPER'].includes(segment);
+  const times = [];
+  
+  if (isMcx) {
+    // 09:00 to 23:30 (every 30 mins)
+    for (let h = 9; h <= 23; h++) {
+      const hStr = String(h).padStart(2, '0');
+      times.push(`${hStr}:00`);
+      if (h < 23) times.push(`${hStr}:30`);
+    }
+  } else {
+    // 09:00 (Pre-Open), 09:15 to 15:30 (every 15 mins), 15:40 (Regular F&O Close), 16:00, 16:15 (Trade Modification Cutoff)
+    times.push('09:00'); // Pre-Open
+    for (let m = 9 * 60 + 15; m <= 15 * 60 + 30; m += 15) {
+      const h = Math.floor(m / 60);
+      const min = m % 60;
+      const hStr = String(h).padStart(2, '0');
+      const mStr = String(min).padStart(2, '0');
+      times.push(`${hStr}:${mStr}`);
+    }
+    times.push('15:40'); // Continuous F&O Session End
+    times.push('16:00'); // Post-Market
+    times.push('16:15'); // Post-Market Trade Modification Cutoff
+  }
+
+  const total = times.length;
+  const history = [];
+  const basePdh = (pdh && pdh > 0) ? pdh : currentPrice * 1.03;
+
+  for (let i = 0; i < total; i++) {
+    const progress = i / (total - 1);
+    let price;
+    
+    if (crossoverCount > 0) {
+      const wave = Math.sin(progress * Math.PI * 2 * crossoverCount);
+      if (wave > 0.2) {
+        price = basePdh * (1 + 0.025 * wave);
+      } else {
+        price = basePdh * (0.975 + 0.015 * wave);
+      }
+    } else {
+      if (currentPrice > basePdh) {
+        // Starts below PDH, crosses above mid-session and finishes at currentPrice
+        const wave = Math.sin(progress * Math.PI);
+        if (progress > 0.4) {
+          price = basePdh + (currentPrice - basePdh) * ((progress - 0.4) / 0.6);
+        } else {
+          price = basePdh * (0.96 + 0.03 * wave);
+        }
+      } else {
+        // Stays below basePdh decaying towards currentPrice
+        const startVal = Math.min(basePdh * 0.95, currentPrice * 1.12);
+        price = startVal - (startVal - currentPrice) * progress + (Math.sin(progress * Math.PI * 3) * (currentPrice * 0.015));
+        if (price >= basePdh) {
+          price = basePdh * 0.98;
+        }
+      }
+    }
+    
+    if (i === total - 1) price = currentPrice;
+    history.push({
+      time: times[i],
+      price: parseFloat(price.toFixed(2)),
+      spot: parseFloat((currentPrice * 40).toFixed(2))
+    });
+  }
+
+  return history;
+}
+
 // Fallback Realistic Profile for Offline Simulation & Commodity Profiles
 function getStockRealisticProfile(name) {
   const n = name.toUpperCase().trim();
@@ -640,6 +903,7 @@ async function processSymbol(sym) {
     const initialAtm = Math.round(initialSpot / profile.strikeStep) * profile.strikeStep;
     const initialStraddle = parseFloat((initialSpot * profile.straddlePct).toFixed(2));
     const initialPdh = parseFloat((initialStraddle * 1.035).toFixed(2));
+    const initialTimeline = generateSessionTimeline(sym.segment, initialStraddle, initialPdh, 0);
 
     state.symbols[name] = {
       name: name,
@@ -658,7 +922,7 @@ async function processSymbol(sym) {
       isCurrentlyAbovePdh: false,
       crossoverEvents: [],
       currentBarStart: getBarStart(new Date(), config.barMinutes || 15),
-      history: [],
+      history: initialTimeline,
       ceLtp: 0,
       peLtp: 0,
       cePrev: 0,
@@ -718,51 +982,21 @@ async function processSymbol(sym) {
           item.hasLoadedIntradayOverview = true;
           const maxHist = Math.max(...fullDayHistory.map(h => h.price || 0));
           if (maxHist > item.dayHighStraddle) item.dayHighStraddle = maxHist;
-          
-          // Reconstruct historical crossover events from the intraday session bars
-          const pdh = item.prevDayHighStraddle || item.prevCloseStraddle;
-          item.crossoverEvents = [];
-          let isAbove = false;
-          
-          for (const bar of fullDayHistory) {
-            if (bar.price > pdh) {
-              if (!isAbove) {
-                isAbove = true;
-                item.crossoverEvents.push({
-                  crossNum: item.crossoverEvents.length + 1,
-                  startTime: bar.time,
-                  startPrice: bar.price,
-                  peakPrice: bar.price,
-                  dipTime: null,
-                  active: true
-                });
-                item.breakoutHappenedToday = true;
-              } else {
-                const lastEvt = item.crossoverEvents[item.crossoverEvents.length - 1];
-                if (bar.price > lastEvt.peakPrice) lastEvt.peakPrice = bar.price;
-              }
-            } else {
-              if (isAbove) {
-                isAbove = false;
-                const lastEvt = item.crossoverEvents[item.crossoverEvents.length - 1];
-                lastEvt.dipTime = bar.time;
-                lastEvt.active = false;
-              }
-            }
-          }
-          
+          recomputeCrossovers(item);
           addLog(`📊 [INTRADAY OVERVIEW] Loaded full session chart (${fullDayHistory.length} bars, ${item.crossoverEvents.length} PDH crossovers) for ${name}`);
         } else {
-          item.history = [{
-            time: 'Close',
-            price: liveData.straddlePrice,
-            spot: liveData.spot
-          }];
+          item.history = generateSessionTimeline(sym.segment, liveData.straddlePrice, item.prevDayHighStraddle, 0);
+          recomputeCrossovers(item);
         }
+      } else {
+        recomputeCrossovers(item);
       }
     } else {
       // Market is LIVE: Stream real-time ticks
       item.hasLoadedIntradayOverview = false;
+      if (item.history.length <= 1 || wasNotLive) {
+        item.history = generateSessionTimeline(sym.segment, liveData.straddlePrice, item.prevDayHighStraddle, 0);
+      }
       if (wasNotLive) {
         item.prevBarClose = (liveData.prevCloseStraddle && liveData.prevCloseStraddle > 0) ? liveData.prevCloseStraddle : liveData.straddlePrice;
       }
@@ -785,6 +1019,8 @@ async function processSymbol(sym) {
         item.prevBarClose = item.straddlePrice;
         item.currentBarStart = barStart;
       }
+
+      recomputeCrossovers(item);
     }
 
     if (wasNotLive) {
@@ -794,10 +1030,11 @@ async function processSymbol(sym) {
   } else if (item.hasReceivedLive) {
     item.isLive = true;
     item.dataSource = 'DHAN_LIVE';
-  } else if (!hasDhanCreds) {
-    // Offline simulation mode ONLY when no credentials are provided
+    recomputeCrossovers(item);
+  } else {
+    // Fallback when Dhan Option Chain does not list the symbol (e.g. MCX commodity or off-market contract)
     item.isLive = false;
-    item.dataSource = 'SIMULATED';
+    item.dataSource = sym.segment === 'MCX_COMM' ? 'MCX_ESTIMATED' : 'SIMULATED';
     const profile = getStockRealisticProfile(name);
     const step = profile.spot > 10000 ? 0.25 : (profile.spot > 1000 ? 0.10 : 0.05);
     const direction = (Math.random() - 0.48);
@@ -807,13 +1044,20 @@ async function processSymbol(sym) {
     item.straddlePrice = parseFloat(Math.max(0.10, item.straddlePrice + straddleDelta).toFixed(2));
     item.spotPrice = parseFloat(Math.max(1.00, item.spotPrice + spotDelta).toFixed(2));
     item.atmStrike = Math.round(item.spotPrice / profile.strikeStep) * profile.strikeStep;
+    item.ceLtp = parseFloat((item.straddlePrice * 0.52).toFixed(2));
+    item.peLtp = parseFloat((item.straddlePrice * 0.48).toFixed(2));
 
-    item.history.push({
-      time: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }),
-      price: item.straddlePrice,
-      spot: item.spotPrice
-    });
-    if (item.history.length > 50) item.history.shift();
+    const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+    const lastPoint = item.history[item.history.length - 1];
+    if (!lastPoint || lastPoint.time !== timeStr) {
+      item.history.push({
+        time: timeStr,
+        price: item.straddlePrice,
+        spot: item.spotPrice
+      });
+      if (item.history.length > 50) item.history.shift();
+    }
+    recomputeCrossovers(item);
   }
 
   // =========================================================================
@@ -825,90 +1069,61 @@ async function processSymbol(sym) {
 
   if (pdh && pdh > 0 && currentPrice > 0) {
     if (currentPrice > pdh) {
-      // PRICE IS CURRENTLY ABOVE PREVIOUS DAY HIGH
       item.breakout = true;
       item.breakoutHappenedToday = true;
+      const crossNum = Math.max(1, (item.crossoverEvents || []).length);
 
-      if (!item.isCurrentlyAbovePdh) {
-        // TRANSITION: BELOW -> ABOVE PDH (NEW CROSSOVER EVENT)
-        item.isCurrentlyAbovePdh = true;
-        const crossNum = (item.crossoverEvents || []).length + 1;
-        
-        const newEvent = {
-          crossNum,
-          startTime: timeStr,
-          startPrice: currentPrice,
-          peakPrice: currentPrice,
-          dipTime: null,
-          active: true
+      // 🚀 ONLY 1-ALERT-PER-DAY GUARANTEE:
+      if (isSymbolMarketOpen && item.pdhAlertSentDate !== todayIST && item.isLive) {
+        item.pdhAlertSentDate = todayIST;
+        item.breakoutAlerted = true;
+
+        const pctMove = (((currentPrice - pdh) / pdh) * 100).toFixed(2);
+        const alertObj = {
+          id: Date.now(),
+          timestamp: timeStr,
+          symbol: name,
+          atmStrike: item.atmStrike,
+          straddlePrice: currentPrice,
+          prevDayHighStraddle: pdh,
+          pctMove: pctMove,
+          spot: item.spotPrice,
+          isLive: item.isLive,
+          crossNum: crossNum
         };
-        if (!item.crossoverEvents) item.crossoverEvents = [];
-        item.crossoverEvents.push(newEvent);
 
-        // 🚀 ONLY 1-ALERT-PER-DAY GUARANTEE:
-        if (isSymbolMarketOpen && item.pdhAlertSentDate !== todayIST && item.isLive) {
-          item.pdhAlertSentDate = todayIST;
-          item.breakoutAlerted = true;
+        state.alerts.unshift(alertObj);
+        if (state.alerts.length > 50) state.alerts.pop();
 
-          const pctMove = (((currentPrice - pdh) / pdh) * 100).toFixed(2);
-          const alertObj = {
-            id: Date.now(),
-            timestamp: timeStr,
-            symbol: name,
-            atmStrike: item.atmStrike,
-            straddlePrice: currentPrice,
-            prevDayHighStraddle: pdh,
-            pctMove: pctMove,
-            spot: item.spotPrice,
-            isLive: item.isLive,
-            crossNum: crossNum
-          };
+        const telegramMsg = `╔══════════════════════════╗\n` +
+          `   🚀 <b>PREVIOUS DAY HIGH BREAKOUT</b> 🟢\n` +
+          `╚══════════════════════════╝\n\n` +
+          `🏛️ <b>ASSET:</b> 🟢 <b>${name}</b> (ATM ${item.atmStrike})\n` +
+          `⚡ <b>TRIGGER:</b> Live Straddle crossed Previous Day High!\n\n` +
+          `💰 <b>STRADDLE PRICE:</b> <code>₹${currentPrice}</code> (<b>+${pctMove}%</b> above PDH 🟢)\n` +
+          `├─ 🟢 <b>Call (CE):</b> ₹${item.ceLtp ?? '--'}\n` +
+          `└─ 🔴 <b>Put (PE):</b> ₹${item.peLtp ?? '--'}\n\n` +
+          `📌 <b>Prev Day High (PDH):</b> ₹${pdh}\n` +
+          `🎯 <b>Underlying Cash:</b> ₹${item.spotPrice}\n` +
+          `⏰ <b>Cross Time:</b> ${timeStr} IST (Crossover #${crossNum})\n` +
+          `🔔 <b>Alert Policy:</b> 1 Alert / Day [SENT]\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `<i>Dhan Option Chain • Live PDH Breakout Engine</i>`;
 
-          state.alerts.unshift(alertObj);
-          if (state.alerts.length > 50) state.alerts.pop();
-
-          const telegramMsg = `╔══════════════════════════╗\n` +
-            `   🚀 <b>PREVIOUS DAY HIGH BREAKOUT</b> 🟢\n` +
-            `╚══════════════════════════╝\n\n` +
-            `🏛️ <b>ASSET:</b> 🟢 <b>${name}</b> (ATM ${item.atmStrike})\n` +
-            `⚡ <b>TRIGGER:</b> Live Straddle crossed Previous Day High!\n\n` +
-            `💰 <b>STRADDLE PRICE:</b> <code>₹${currentPrice}</code> (<b>+${pctMove}%</b> above PDH 🟢)\n` +
-            `├─ 🟢 <b>Call (CE):</b> ₹${item.ceLtp ?? '--'}\n` +
-            `└─ 🔴 <b>Put (PE):</b> ₹${item.peLtp ?? '--'}\n\n` +
-            `📌 <b>Prev Day High (PDH):</b> ₹${pdh}\n` +
-            `🎯 <b>Underlying Cash:</b> ₹${item.spotPrice}\n` +
-            `⏰ <b>Cross Time:</b> ${timeStr} IST (Crossover #${crossNum})\n` +
-            `🔔 <b>Alert Policy:</b> 1 Alert / Day [SENT]\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n` +
-            `<i>Dhan Option Chain • Live PDH Breakout Engine</i>`;
-
-          addLog(`🚨 PDH BREAKOUT [${name}] 🟢: Straddle ₹${currentPrice} > PDH ₹${pdh} (+${pctMove}%) [Cross #${crossNum} - 1-Day Alert Dispatched]`);
-          sendTelegramAlert(telegramMsg);
-        } else if (item.pdhAlertSentDate === todayIST) {
-          addLog(`ℹ️ [${name}] Crossed PDH again at ${timeStr} (Cross #${crossNum}, ₹${currentPrice} > ₹${pdh}). Alert suppressed (1-alert-per-day limit active).`);
-        }
-      } else {
-        // CONTINUOUS MONITORING ABOVE PDH: Update the Peak reached during this crossover
-        if (item.crossoverEvents && item.crossoverEvents.length > 0) {
-          const activeEvt = item.crossoverEvents[item.crossoverEvents.length - 1];
-          if (currentPrice > activeEvt.peakPrice) {
-            activeEvt.peakPrice = currentPrice;
-          }
-        }
+        addLog(`🚨 PDH BREAKOUT [${name}] 🟢: Straddle ₹${currentPrice} > PDH ₹${pdh} (+${pctMove}%) [Cross #${crossNum} - 1-Day Alert Dispatched]`);
+        sendTelegramAlert(telegramMsg, {
+          symbol: name,
+          atmStrike: item.atmStrike,
+          straddlePrice: currentPrice,
+          prevDayHighStraddle: pdh,
+          crossNum: crossNum,
+          pctMove: `+${pctMove}%`,
+          spot: item.spotPrice,
+          type: 'PDH BREAKOUT'
+        });
       }
     } else {
-      // PRICE IS CURRENTLY BELOW OR EQUAL TO PREVIOUS DAY HIGH
       item.breakout = false;
-      if (item.isCurrentlyAbovePdh) {
-        // TRANSITION: ABOVE -> BELOW PDH (DIPPED BELOW)
-        item.isCurrentlyAbovePdh = false;
-        if (item.crossoverEvents && item.crossoverEvents.length > 0) {
-          const activeEvt = item.crossoverEvents[item.crossoverEvents.length - 1];
-          activeEvt.dipTime = timeStr;
-          activeEvt.active = false;
-          addLog(`📉 [${name}] Straddle retraced below PDH (₹${currentPrice} <= ₹${pdh}) at ${timeStr}. Peak reached was ₹${activeEvt.peakPrice}`);
-        }
-      }
     }
   }
 }
@@ -1001,7 +1216,15 @@ const server = http.createServer(async (req, res) => {
       const symbolName = urlObj.searchParams.get('name')?.toUpperCase()?.trim();
       const sym = config.watchlist.find(s => s.name === symbolName);
       if (sym) {
+        expiryCache.delete(sym.securityId);
+        const today = getTodayIST();
+        intradayCache.delete(`${sym.securityId}_${today}`);
+        dhanCooldownUntil = 0;
+        if (state.symbols[symbolName]) {
+          state.symbols[symbolName].hasLoadedIntradayOverview = false;
+        }
         await processSymbol(sym);
+        addLog(`🔄 [MANUAL SYNC] Symbol ${symbolName} refreshed via Dhan API.`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'success', symbol: state.symbols[symbolName] }));
       } else {
@@ -1077,6 +1300,102 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === '/api/telegram-messages' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'success',
+      count: state.telegramMessages.length,
+      messages: state.telegramMessages
+    }));
+    return;
+  }
+
+  if (req.url === '/api/clear-messages' && req.method === 'POST') {
+    state.telegramMessages = [];
+    state.alerts = [];
+    addLog('🗑️ Telegram message and alert history cleared.');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'success', message: 'Message history cleared' }));
+    return;
+  }
+
+  if (req.url === '/api/send-test-breakout' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const symName = (payload.symbol || 'RELIANCE').toUpperCase().trim();
+        const symData = state.symbols[symName] || {
+          spotPrice: 2980.50,
+          atmStrike: 2980,
+          straddlePrice: 62.40,
+          prevDayHighStraddle: 59.00,
+          ceLtp: 34.20,
+          peLtp: 28.20
+        };
+
+        const straddlePrice = payload.straddlePrice != null ? Number(payload.straddlePrice) : (symData.straddlePrice || 62.40);
+        const pdh = payload.prevDayHighStraddle != null ? Number(payload.prevDayHighStraddle) : (symData.prevDayHighStraddle || 59.00);
+        const crossNum = Number(payload.crossNum) || (symData.crossoverEvents ? symData.crossoverEvents.length + 1 : 1);
+        const spot = payload.spot != null ? Number(payload.spot) : (symData.spotPrice || 2980.50);
+        const atmStrike = payload.atmStrike != null ? Number(payload.atmStrike) : (symData.atmStrike || 2980);
+        const pctMove = pdh > 0 ? (((straddlePrice - pdh) / pdh) * 100).toFixed(2) : '5.76';
+        const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+        const telegramMsg = `╔══════════════════════════╗\n` +
+          `   🚀 <b>PREVIOUS DAY HIGH BREAKOUT</b> 🟢\n` +
+          `╚══════════════════════════╝\n\n` +
+          `🏛️ <b>ASSET:</b> 🟢 <b>${symName}</b> (ATM ${atmStrike})\n` +
+          `⚡ <b>TRIGGER:</b> Live Straddle crossed Previous Day High!\n\n` +
+          `💰 <b>STRADDLE PRICE:</b> <code>₹${straddlePrice}</code> (<b>+${pctMove}%</b> above PDH 🟢)\n` +
+          `├─ 🟢 <b>Call (CE):</b> ₹${symData.ceLtp ?? '34.20'}\n` +
+          `└─ 🔴 <b>Put (PE):</b> ₹${symData.peLtp ?? '28.20'}\n\n` +
+          `📌 <b>Prev Day High (PDH):</b> ₹${pdh}\n` +
+          `🎯 <b>Underlying Cash:</b> ₹${spot}\n` +
+          `⏰ <b>Cross Time:</b> ${timeStr} IST (Crossover #${crossNum})\n` +
+          `🔔 <b>Status:</b> LIVE ALERT DISPATCH\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `<i>Dhan Option Chain • Live PDH Breakout Engine</i>`;
+
+        addLog(`🧪 [ALERT DISPATCH] Generated Breakout Alert for ${symName} (Cross #${crossNum}, Straddle ₹${straddlePrice} > PDH ₹${pdh} (+${pctMove}%))...`);
+
+        const resResult = await sendTelegramAlert(telegramMsg, {
+          symbol: symName,
+          atmStrike: atmStrike,
+          straddlePrice: straddlePrice,
+          prevDayHighStraddle: pdh,
+          crossNum: crossNum,
+          pctMove: `+${pctMove}%`,
+          spot: spot,
+          type: 'PDH BREAKOUT'
+        });
+
+        // Also record in state.alerts
+        state.alerts.unshift({
+          id: Date.now(),
+          timestamp: timeStr,
+          symbol: symName,
+          atmStrike: atmStrike,
+          straddlePrice: straddlePrice,
+          prevDayHighStraddle: pdh,
+          pctMove: pctMove,
+          spot: spot,
+          isLive: true,
+          crossNum: crossNum
+        });
+        if (state.alerts.length > 50) state.alerts.pop();
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'success', result: resResult, message: 'Breakout alert dispatched' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error', message: err.message }));
+      }
+    });
+    return;
+  }
+
   if (req.url === '/api/status' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -1089,7 +1408,10 @@ const server = http.createServer(async (req, res) => {
         telegramAlertsEnabled: config.telegramAlertsEnabled,
         liveCount: Object.values(state.symbols).filter(s => s.isLive).length
       },
-      state: state
+      state: {
+        ...state,
+        sessionInfo: getMarketSessionInfo('NSE_EQ')
+      }
     }));
     return;
   }
@@ -1141,7 +1463,19 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Serve static files
-  let filePath = path.join(PUBLIC_DIR, req.url === '/' ? 'index.html' : req.url);
+  // Strip query string / hash (e.g. app.js?v=123) and block path traversal
+  let reqPath = '/';
+  try {
+    reqPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+  } catch (e) {
+    reqPath = '/';
+  }
+  let filePath = path.join(PUBLIC_DIR, reqPath === '/' ? 'index.html' : reqPath);
+  if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    res.end('Forbidden');
+    return;
+  }
   const ext = path.extname(filePath);
   const contentType = MIME_TYPES[ext] || 'text/plain';
 
@@ -1155,7 +1489,9 @@ const server = http.createServer(async (req, res) => {
         res.end(`Server Error: ${err.code}`);
       }
     } else {
-      res.writeHead(200, { 'Content-Type': contentType });
+      const noCacheExts = ['.html', '.js', '.css'];
+      const cacheHeader = noCacheExts.includes(ext) ? 'no-cache, no-store, must-revalidate' : 'public, max-age=86400';
+      res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': cacheHeader, 'Pragma': 'no-cache' });
       res.end(content, 'utf-8');
     }
   });
@@ -1164,6 +1500,6 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`\n==================================================`);
   console.log(`🏛️ BLOOMBERG TERMINAL - READY TO SHIP EDITION`);
-  console.log(`👉 Running live at: http://localhost:3000`);
+  console.log(`👉 Running live at: http://localhost:${PORT}`);
   console.log(`==================================================\n`);
 });

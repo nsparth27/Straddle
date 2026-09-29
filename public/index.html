@@ -8,37 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-
-  <!-- Security PIN Lock Modal -->
-  <div id="pinLockModal" class="pin-modal-overlay">
-    <div class="pin-card">
-      <div class="pin-badge" id="pinBadge">🔒 SECURITY LEVEL 1</div>
-      <div class="pin-header">
-        <span class="tag">BLOOMBERG AUTH</span>
-        <h2>ENTER ACCESS PIN</h2>
-      </div>
-      <p class="pin-desc" id="pinDesc">This terminal is private. Enter the 4-digit security PIN to unlock live market data & controls.</p>
-      
-      <div class="pin-input-container" id="pinInputContainer">
-        <input type="password" id="pinInput" maxlength="4" placeholder="••••" autocomplete="off" autofocus inputmode="numeric" />
-        <button class="pin-submit-btn" id="pinSubmitBtn" onclick="verifyPin()">UNLOCK [ ↵ ]</button>
-      </div>
-      
-      <div id="pinError" class="pin-error-msg"></div>
-
-      <!-- 3-Attempts Lockout Message & Timer -->
-      <div id="pinLockoutBox" class="pin-lockout-box" style="display: none;">
-        <div class="lockout-timer" id="lockoutTimer">⏳ 05:00</div>
-        <div class="lockout-msg">🚫 <b>TERMINAL LOCKED (3 Failed Attempts)</b></div>
-        <div class="lockout-tribute">💬 If you want the PIN, send <b>₹1,000</b> to <b>Parth Dhulla</b>.</div>
-      </div>
-
-      <div class="pin-footer" id="pinAttemptsLabel">Attempts remaining: 3 / 3</div>
-    </div>
-  </div>
 
   <!-- Bloomberg Header -->
   <header class="bb-header">
@@ -52,7 +23,6 @@
         <span id="marketStatusText">MARKET OPEN</span>
       </div>
       <div style="color: var(--bb-cyan); font-weight: 700;" id="clockIST">00:00:00 IST</div>
-      <button class="lock-btn" onclick="lockTerminal()" title="Lock Terminal Session">🔒 LOCK</button>
     </div>
   </header>
 
@@ -80,14 +50,17 @@
 
   <!-- Navigation Tabs -->
   <nav class="tab-navigation">
-    <button class="tab-btn active" onclick="switchTab('dashboard')">
+    <button class="tab-btn active" onclick="switchTab('dashboard')" id="tabBtnDashboard">
       <span class="key-code">[ F1 ]</span> LIVE DASHBOARD (230 F&O STOCKS)
     </button>
-    <button class="tab-btn" onclick="switchTab('alerts')">
-      <span class="key-code">[ F2 ]</span> BREAKOUT ALERTS FEED
+    <button class="tab-btn" onclick="switchTab('alerts')" id="tabBtnAlerts">
+      <span class="key-code">[ F2 ]</span> 📨 TELEGRAM OUTBOX &amp; DISPATCH MONITOR <span class="badge-count" id="outboxBadgeCount">0</span>
     </button>
-    <button class="tab-btn" onclick="switchTab('settings')">
-      <span class="key-code">[ F3 ]</span> SETTINGS & API KEYS
+    <button class="tab-btn" onclick="switchTab('settings')" id="tabBtnSettings">
+      <span class="key-code">[ F3 ]</span> SETTINGS &amp; API KEYS
+    </button>
+    <button class="tab-btn" onclick="switchTab('radar')" id="tabBtnRadar">
+      <span class="key-code">[ F4 ]</span> 🚀 BREAKOUT RADAR &amp; ALPHA LEADERBOARD <span class="badge-count" id="radarBadgeCount" style="background: var(--bb-green); color: #000;">0</span>
     </button>
   </nav>
 
@@ -160,47 +133,129 @@
 
       </div>
 
-      <!-- TAB 2: BREAKOUT ALERTS FEED -->
+      <!-- TAB 2: TELEGRAM OUTBOX & LIVE DISPATCH MONITOR -->
       <div id="tab-alerts" class="tab-content">
+        
+        <!-- Top Metrics / Status Banner -->
+        <div class="grid-4" style="margin-bottom: 1rem;">
+          <div class="stat-card">
+            <div class="stat-label">Total Messages Generated</div>
+            <div class="stat-val" style="color: var(--bb-amber);" id="metricTotalMessages">0</div>
+            <div class="stat-sub">Dispatched to Telegram Queue</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Delivered (<span class="tick-double-icon">✓✓</span> WhatsApp Ticks)</div>
+            <div class="stat-val" style="color: var(--bb-green);" id="metricDeliveredMessages">0</div>
+            <div class="stat-sub">Confirmed by Telegram API</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">PDH Breakout Alerts</div>
+            <div class="stat-val" style="color: var(--bb-cyan);" id="metricBreakoutAlerts">0</div>
+            <div class="stat-sub">Straddle &gt; Prev Day High</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Multi-Crossover Events</div>
+            <div class="stat-val" style="color: #FF6E40;" id="metricMultiCrossEvents">0</div>
+            <div class="stat-sub">Crossed 2+ Times Today</div>
+          </div>
+        </div>
+
         <div class="bb-panel">
-          <div class="panel-header" style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-            <div class="panel-title">🚨 PREVIOUS DAY HIGH (PDH) BREAKOUT LOGS</div>
-            <div style="margin-left: auto; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <div class="panel-header" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+            <div class="panel-title" style="display: flex; align-items: center; gap: 0.5rem;">
+              <span>📨 TELEGRAM DISPATCH OUTBOX &amp; DELIVERY MONITOR</span>
+              <span class="badge-breakout" style="background: rgba(0, 230, 118, 0.15); color: var(--bb-green); border-color: var(--bb-green);">REAL-TIME</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn" onclick="openTestModal()" style="font-size: 0.75rem; padding: 0.4rem 0.8rem; background: var(--bb-amber); color: #000; font-weight: 800;">
+                🚀 Test Breakout Alert
+              </button>
               <button class="btn btn-secondary" onclick="trigger5MinScan()" style="font-size: 0.75rem; padding: 0.4rem 0.8rem; background: var(--bb-green); color: #000; font-weight: 700;">
                 ⚡ Run 5-Min Scan Now
               </button>
-              <button class="btn btn-secondary" onclick="triggerDailyReport()" style="font-size: 0.75rem; padding: 0.4rem 0.8rem; background: var(--bb-amber); color: #000; font-weight: 700;">
-                📊 Send EOD Report to Telegram
+              <button class="btn btn-secondary" onclick="triggerDailyReport()" style="font-size: 0.75rem; padding: 0.4rem 0.8rem; border-color: var(--bb-cyan); color: var(--bb-cyan);">
+                📊 Send EOD Report
               </button>
-              <button class="btn btn-secondary" onclick="triggerTestAlert()" style="font-size: 0.75rem; padding: 0.4rem 0.8rem;">
-                Test Bot Ping
+              <button class="btn btn-secondary" onclick="openCrossoverSummaryModal()" style="font-size: 0.75rem; padding: 0.4rem 0.8rem; border-color: var(--bb-amber); color: var(--bb-amber);">
+                📈 Crossover Report
+              </button>
+              <button class="btn btn-secondary" onclick="clearMessageHistory()" style="font-size: 0.75rem; padding: 0.4rem 0.8rem; color: var(--bb-red); border-color: var(--bb-red);">
+                🗑️ Clear History
               </button>
             </div>
           </div>
-          <table class="bb-table">
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>Symbol</th>
-                <th>ATM Strike</th>
-                <th>Breakout Straddle Price</th>
-                <th>Prev Day High (PDH)</th>
-                <th>Crossover #</th>
-                <th>Move vs PDH</th>
-                <th>Spot Price</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-          <tbody id="alertsTableBody">
-            <tr>
-              <td colspan="8" style="text-align: center; color: var(--bb-text-muted); padding: 2rem;">
-                No breakouts detected yet. Monitoring live 15-minute bars...
-              </td>
-            </tr>
-          </tbody>
-        </table>
+
+          <!-- Comprehensive Filter Controls -->
+          <div style="background: #0B0E15; border-bottom: 1px solid var(--bb-panel-border); padding: 0.85rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+            <div style="display: flex; gap: 0.85rem; align-items: center; flex-wrap: wrap;">
+              
+              <!-- Symbol Search -->
+              <div style="flex: 1; min-width: 200px;">
+                <input type="text" id="msgSearchInput" placeholder="🔍 Search symbol (e.g. RELIANCE, NIFTY, TCS)..." oninput="applyMessageFilters()" style="padding: 0.45rem 0.75rem; font-size: 0.82rem;">
+              </div>
+
+              <!-- Delivery Status Filter Dropdown -->
+              <div style="min-width: 160px;">
+                <select id="msgDeliveryFilter" onchange="applyMessageFilters()" style="padding: 0.45rem 0.75rem; font-size: 0.82rem;">
+                  <option value="ALL">All Delivery Status</option>
+                  <option value="delivered">✓✓ Delivered (Success)</option>
+                  <option value="sending">⏳ Sending / Queued</option>
+                  <option value="failed">❌ Failed / Error</option>
+                </select>
+              </div>
+
+              <!-- Message Type Filter Dropdown -->
+              <div style="min-width: 170px;">
+                <select id="msgTypeFilter" onchange="applyMessageFilters()" style="padding: 0.45rem 0.75rem; font-size: 0.82rem;">
+                  <option value="ALL">All Message Types</option>
+                  <option value="PDH BREAKOUT">🚀 PDH Breakouts</option>
+                  <option value="5-MIN SCAN">⚡ 5-Min Scans</option>
+                  <option value="DAILY EOD REPORT">📊 Daily EOD Reports</option>
+                </select>
+              </div>
+
+            </div>
+
+            <!-- Crossover Filter Pills -->
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+              <span style="font-size: 0.75rem; color: var(--bb-text-muted); font-weight: 700;">FILTER BY CROSSOVER #:</span>
+              <button class="filter-pill active" onclick="setCrossoverFilter('ALL')" id="crossPillALL">All Crossovers</button>
+              <button class="filter-pill" onclick="setCrossoverFilter('1')" id="crossPill1">⚡ Cross #1 (1st Breakout)</button>
+              <button class="filter-pill" onclick="setCrossoverFilter('2')" id="crossPill2">🔥 Cross #2 (2nd Breakout)</button>
+              <button class="filter-pill" onclick="setCrossoverFilter('3+')" id="crossPill3">🚀 Cross #3+ (Multi-Cross)</button>
+              <span id="activeFilterBadge" style="margin-left: auto; font-size: 0.75rem; color: var(--bb-cyan);">Showing All Messages</span>
+            </div>
+          </div>
+
+          <!-- Telegram Messages Table -->
+          <div style="overflow-x: auto;">
+            <table class="bb-table">
+              <thead>
+                <tr>
+                  <th style="width: 120px;">Delivery (Ticks)</th>
+                  <th class="sortable" onclick="sortMessages('timestamp')">Timestamp <span class="sort-icon" id="sort-timestamp">▼</span></th>
+                  <th class="sortable" onclick="sortMessages('symbol')">Symbol <span class="sort-icon" id="sort-symbol"></span></th>
+                  <th class="sortable" onclick="sortMessages('atmStrike')">ATM Strike <span class="sort-icon" id="sort-atmStrike"></span></th>
+                  <th class="sortable" onclick="sortMessages('straddlePrice')">Breakout Straddle Price <span class="sort-icon" id="sort-straddlePrice"></span></th>
+                  <th class="sortable" onclick="sortMessages('prevDayHighStraddle')">Prev Day High (PDH) <span class="sort-icon" id="sort-prevDayHighStraddle"></span></th>
+                  <th class="sortable" onclick="sortMessages('crossNum')" title="Click column header to sort, or click any crossover badge below to filter!">Crossover # <span class="sort-icon" id="sort-crossNum"></span></th>
+                  <th class="sortable" onclick="sortMessages('pctMove')">Move vs PDH <span class="sort-icon" id="sort-pctMove"></span></th>
+                  <th class="sortable" onclick="sortMessages('spot')">Spot Price <span class="sort-icon" id="sort-spot"></span></th>
+                  <th class="sortable" onclick="sortMessages('status')">Status <span class="sort-icon" id="sort-status"></span></th>
+                  <th style="text-align: center; width: 130px;">Message Preview</th>
+                </tr>
+              </thead>
+              <tbody id="messagesTableBody">
+                <tr>
+                  <td colspan="11" style="text-align: center; color: var(--bb-text-muted); padding: 2.5rem;">
+                    No messages in Telegram dispatch queue yet. Real-time breakouts and 5-min scans will appear here with WhatsApp double ticks (✓✓).
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
-    </div>
 
     <!-- TAB 3: SETTINGS & API KEYS -->
     <div id="tab-settings" class="tab-content">
@@ -300,8 +355,335 @@
       </div>
     </div>
 
+    <!-- TAB 4: 🚀 BREAKOUT RADAR & ALPHA LEADERBOARD -->
+    <div id="tab-radar" class="tab-content">
+      
+      <!-- Top Metrics Banner -->
+      <div class="grid-4" style="margin-bottom: 1.25rem;">
+        <div class="stat-card" style="border-left-color: var(--bb-amber);">
+          <div class="stat-label">Total Assets Monitored</div>
+          <div class="stat-val" id="radarStatTotal">230</div>
+          <div class="stat-sub">217 F&O • 4 Indices • 5 MCX</div>
+        </div>
+
+        <div class="stat-card" style="border-left-color: var(--bb-green); background: rgba(0, 230, 118, 0.05);">
+          <div class="stat-label">⚡ Active Breakouts (Live > PDH)</div>
+          <div class="stat-val" style="color: var(--bb-green);" id="radarStatActive">0</div>
+          <div class="stat-sub">Trading strictly above PDH right now</div>
+        </div>
+
+        <div class="stat-card" style="border-left-color: #FF6E40; background: rgba(255, 110, 64, 0.05);">
+          <div class="stat-label">🔥 Multi-Crossover Stocks (2+ Crosses)</div>
+          <div class="stat-val" style="color: #FF6E40;" id="radarStatMulti">0</div>
+          <div class="stat-sub">Institutions re-testing breakouts</div>
+        </div>
+
+        <div class="stat-card" style="border-left-color: var(--bb-cyan); background: rgba(0, 229, 255, 0.05);">
+          <div class="stat-label">🚀 Top Peak Growth Leader</div>
+          <div class="stat-val" style="color: var(--bb-cyan); font-size: 1.25rem;" id="radarStatTopGainer">--</div>
+          <div class="stat-sub" id="radarStatTopGainerSub">Highest % gain above PDH</div>
+        </div>
+      </div>
+
+      <!-- Radar Filter & Auto-Sort Control Bar -->
+      <div class="bb-panel" style="padding: 0.9rem 1.25rem; margin-bottom: 1.25rem;">
+        <div style="display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+          
+          <!-- Mode Selector Pills -->
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <span style="font-size: 0.75rem; color: var(--bb-text-muted); font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">AUTO-RANK BY:</span>
+            <button class="filter-pill active" onclick="setRadarSortMode('MULTI_CROSS')" id="radarPillMultiCross">
+              🔥 TOP CROSSOVERS (MULTI-HIT)
+            </button>
+            <button class="filter-pill" onclick="setRadarSortMode('HIGHEST_GROWTH')" id="radarPillHighestGrowth">
+              🚀 HIGHEST % GROWTH (PEAK GAIN)
+            </button>
+            <button class="filter-pill" onclick="setRadarSortMode('ACTIVE_NOW')" id="radarPillActiveNow">
+              ⚡ ACTIVE BREAKOUTS (LIVE > PDH)
+            </button>
+            <button class="filter-pill" onclick="setRadarSortMode('INDICES')" id="radarPillIndices">
+              🏛️ INDICES ONLY
+            </button>
+            <button class="filter-pill" onclick="setRadarSortMode('COMMODITIES')" id="radarPillCommodities">
+              🛢️ COMMODITIES
+            </button>
+          </div>
+
+          <!-- Radar Search Bar -->
+          <div style="min-width: 220px; position: relative;">
+            <input type="text" id="radarSearchInput" placeholder="🔍 Filter radar stocks..." oninput="filterRadarSymbols()" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Leaderboard Cards Grid (Symbol-wise with Avatars, Podiums & Smooth Animations) -->
+      <div class="grid-2" id="radarContainer">
+        <!-- Rendered dynamically by renderRadarLeaderboard() -->
+      </div>
+
+    </div>
+
   </main>
 
-  <script src="app.js"></script>
+  <!-- MODAL 0: FULL-VIEW HIGH RESOLUTION CHART & EVENT BREAKDOWN PREVIEW -->
+  <div id="previewChartModal" class="modal-overlay" onclick="if(event.target === this) closePreviewModal()">
+    <div class="modal-content-card" style="max-width: 1050px; width: 95vw;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+          <span class="tag" style="background: var(--bb-green); color: #000; font-size: 0.75rem; font-weight: 900; padding: 0.2rem 0.5rem; border-radius: 3px;">FULL-VIEW CHART PREVIEW</span>
+          <span style="font-weight: 900; color: #FFF; font-size: 1.15rem; letter-spacing: 0.5px;" id="modalSymbolTitle">RELIANCE STRADDLE</span>
+          <span class="badge-breakout" id="modalSourceBadge" style="background: rgba(0, 230, 118, 0.15); color: var(--bb-green); border-color: var(--bb-green); font-size: 0.7rem;">🟢 DHAN LIVE</span>
+          <span class="crossover-count-pill cross-1" id="modalCrossBadge" style="font-size: 0.75rem;">🔥 1 Cross (+12.5% Peak)</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <button class="btn-sync-card" id="modalSyncBtn" onclick="manualSyncModalSymbol(this)" title="Force sync Dhan data">
+            <span class="sync-icon">🔄</span> SYNC
+          </button>
+          <button onclick="closePreviewModal()" style="background: transparent; border: none; color: var(--bb-text-muted); font-size: 1.3rem; cursor: pointer; padding: 0.2rem 0.5rem;" title="Close Preview (ESC)">✕</button>
+        </div>
+      </div>
+      
+      <div class="modal-body" style="max-height: 80vh; overflow-y: auto; padding: 1.25rem;">
+        
+        <!-- Large Chart Container -->
+        <div class="bb-panel" style="padding: 1rem; margin-bottom: 1rem; background: #07090E;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+            <div style="font-size: 0.78rem; font-weight: 800; color: var(--bb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">
+              📈 INTRADAY SESSION STRADDLE TIMELINE (09:00 AM – 03:40 PM / 04:15 PM)
+            </div>
+            <div style="display: flex; gap: 1rem; font-size: 0.75rem;">
+              <span style="color: var(--bb-green); display: flex; align-items: center; gap: 0.35rem;">
+                <span style="width: 14px; height: 3px; background: var(--bb-green); display: inline-block;"></span> Live Straddle
+              </span>
+              <span style="color: #FF3D00; display: flex; align-items: center; gap: 0.35rem;">
+                <span style="width: 14px; height: 0; border-top: 2px dashed #FF3D00; display: inline-block;"></span> PDH Boundary Level
+              </span>
+            </div>
+          </div>
+          <div style="height: 330px; position: relative;">
+            <canvas id="modalChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Key Metrics Strip Grid -->
+        <div class="grid-4" style="margin-bottom: 1.25rem;">
+          <div class="stat-card" id="modalCardStraddle">
+            <div class="stat-label">Live Straddle Price</div>
+            <div class="stat-val" style="color: var(--bb-green);" id="modalValStraddle">₹0.00</div>
+            <div class="stat-sub" id="modalValLegs">CE: ₹0.00 | PE: ₹0.00</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Prev Day High (PDH)</div>
+            <div class="stat-val" id="modalValPdh">₹0.00</div>
+            <div class="stat-sub">Breakout Boundary Level</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Max Peak Gain % Above PDH</div>
+            <div class="stat-val" style="color: var(--bb-cyan);" id="modalValPeakPct">+0.00%</div>
+            <div class="stat-sub" id="modalValPeakPrice">Peak Price: ₹0.00</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Underlying Cash Spot</div>
+            <div class="stat-val" style="color: var(--bb-amber);" id="modalValSpot">₹0.00</div>
+            <div class="stat-sub" id="modalValAtm">ATM Strike: --</div>
+          </div>
+        </div>
+
+        <!-- Chronological Crossover Event History Table -->
+        <div class="bb-panel" style="padding: 1rem; margin-bottom: 0;">
+          <div class="panel-header" style="padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+            <div class="panel-title" style="font-size: 0.85rem; color: var(--bb-cyan);">
+              ⚡ CHRONOLOGICAL CROSSOVER EVENT LOG TODAY
+            </div>
+            <span style="font-size: 0.75rem; color: var(--bb-text-muted);" id="modalCrossoverEventCount">0 Events Detected</span>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="bb-table">
+              <thead>
+                <tr>
+                  <th>Crossover #</th>
+                  <th>Breakout Time (IST)</th>
+                  <th>Start Straddle Price</th>
+                  <th>PDH Level</th>
+                  <th>Peak Straddle Reached</th>
+                  <th>Peak % Gain vs PDH</th>
+                  <th>Retracement / Dip Time</th>
+                  <th>Active Status</th>
+                </tr>
+              </thead>
+              <tbody id="modalCrossoverTableBody">
+                <!-- Dynamically injected -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.75rem; color: var(--bb-text-muted);">Press <kbd style="background: #1E2330; padding: 2px 6px; border-radius: 3px; color: var(--bb-cyan);">ESC</kbd> or click outside to return to dashboard</span>
+        <button class="btn btn-secondary" onclick="closePreviewModal()">Close Preview [ Esc ]</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 1: TELEGRAM MESSAGE PREVIEW & WHATSAPP-STYLE CHAT VIEWER -->
+  <div id="telegramMsgModal" class="modal-overlay" onclick="if(event.target === this) closeMsgModal()">
+    <div class="modal-content-card">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <span class="tag" style="background: var(--bb-cyan); color: #000; font-size: 0.7rem; font-weight: 900; padding: 0.15rem 0.4rem; border-radius: 2px;">TELEGRAM DISPATCH</span>
+          <span style="font-weight: 800; color: var(--bb-amber); font-size: 0.95rem;" id="msgModalTitle">ALERT MESSAGE PREVIEW</span>
+        </div>
+        <button onclick="closeMsgModal()" style="background: transparent; border: none; color: var(--bb-text-muted); font-size: 1.2rem; cursor: pointer; padding: 0.2rem 0.5rem;">✕</button>
+      </div>
+      <div class="modal-body">
+        
+        <!-- Delivery Status Banner -->
+        <div style="display: flex; justify-content: space-between; align-items: center; background: #141924; border: 1px solid var(--bb-panel-border); padding: 0.75rem 1rem; border-radius: 4px;">
+          <div>
+            <div style="font-size: 0.72rem; color: var(--bb-text-muted);">DISPATCH DELIVERY STATE</div>
+            <div id="msgModalDeliveryBadge" class="tick-badge tick-delivered">
+              <span class="tick-double-icon">✓✓</span> DELIVERED TO USER
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 0.72rem; color: var(--bb-text-muted);">TARGET TELEGRAM CHAT</div>
+            <div style="color: var(--bb-cyan); font-weight: 700; font-size: 0.85rem;" id="msgModalChatId">Chat ID: --</div>
+          </div>
+        </div>
+
+        <!-- Telegram Chat Bubble -->
+        <div>
+          <div style="font-size: 0.75rem; color: var(--bb-text-muted); margin-bottom: 0.4rem;">💬 RAW TELEGRAM MESSAGE SENT:</div>
+          <div class="telegram-bubble" id="msgModalBubbleText">
+            <!-- Formatted HTML message text rendered here -->
+          </div>
+        </div>
+
+        <!-- Structured Metadata Grid -->
+        <div class="grid-3" style="font-size: 0.8rem; background: #0B0E15; padding: 0.75rem; border: 1px solid var(--bb-panel-border); border-radius: 4px;">
+          <div><span style="color: var(--bb-text-muted);">Symbol:</span> <b id="msgModalSym" style="color: var(--bb-amber);">--</b></div>
+          <div><span style="color: var(--bb-text-muted);">ATM Strike:</span> <b id="msgModalStrike">--</b></div>
+          <div><span style="color: var(--bb-text-muted);">Straddle:</span> <b id="msgModalStraddle" style="color: var(--bb-green);">--</b></div>
+          <div><span style="color: var(--bb-text-muted);">PDH Level:</span> <b id="msgModalPdh">--</b></div>
+          <div><span style="color: var(--bb-text-muted);">Crossover #:</span> <b id="msgModalCross" style="color: var(--bb-cyan);">--</b></div>
+          <div><span style="color: var(--bb-text-muted);">Move vs PDH:</span> <b id="msgModalMove" style="color: var(--bb-green);">--</b></div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeMsgModal()">Close Preview [ Esc ]</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: SEND / TEST BREAKOUT DISPATCH -->
+  <div id="testBreakoutModal" class="modal-overlay" onclick="if(event.target === this) closeTestModal()">
+    <div class="modal-content-card">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <span class="tag" style="background: var(--bb-amber); color: #000; font-size: 0.7rem; font-weight: 900; padding: 0.15rem 0.4rem; border-radius: 2px;">DISPATCH SIMULATOR</span>
+          <span style="font-weight: 800; color: #FFF; font-size: 0.95rem;">SEND TEST BREAKOUT ALERT</span>
+        </div>
+        <button onclick="closeTestModal()" style="background: transparent; border: none; color: var(--bb-text-muted); font-size: 1.2rem; cursor: pointer;">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.82rem; color: var(--bb-text-muted); line-height: 1.5;">
+          Dispatch a live breakout alert directly to your Telegram chat to verify real-time message delivery and WhatsApp double-check ticks (✓✓).
+        </p>
+
+        <form id="testBreakoutForm" onsubmit="handleSendTestBreakout(event)">
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Select Symbol</label>
+              <select id="testSymbol" style="padding: 0.5rem; font-size: 0.85rem;">
+                <option value="RELIANCE">RELIANCE (NSE_EQ)</option>
+                <option value="NIFTY">NIFTY (INDEX)</option>
+                <option value="BANKNIFTY">BANKNIFTY (INDEX)</option>
+                <option value="HDFCBANK">HDFCBANK (NSE_EQ)</option>
+                <option value="INFY">INFY (NSE_EQ)</option>
+                <option value="TCS">TCS (NSE_EQ)</option>
+                <option value="CRUDEOIL">CRUDEOIL (MCX)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Crossover # (Times Crossed)</label>
+              <select id="testCrossNum" style="padding: 0.5rem; font-size: 0.85rem;">
+                <option value="1">1st Crossover (#1 - Initial Breakout)</option>
+                <option value="2">2nd Crossover (#2 - Second Surge)</option>
+                <option value="3">3rd Crossover (#3 - High Frequency)</option>
+                <option value="4">4th Crossover (#4 - Multi-Cross)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Live Straddle Price (₹)</label>
+              <input type="number" step="0.05" id="testStraddlePrice" value="64.50" required>
+            </div>
+            <div class="form-group">
+              <label>Prev Day High (PDH) Level (₹)</label>
+              <input type="number" step="0.05" id="testPdh" value="59.00" required>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 0.75rem; margin-top: 1rem; justify-content: flex-end;">
+            <button type="button" class="btn btn-secondary" onclick="closeTestModal()">Cancel</button>
+            <button type="submit" class="btn" style="background: var(--bb-green); color: #000; font-weight: 800;">
+              🚀 Dispatch to Telegram Now
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: CROSSOVER FREQUENCY REPORT & BREAKDOWN -->
+  <div id="crossoverSummaryModal" class="modal-overlay" onclick="if(event.target === this) closeCrossoverSummaryModal()">
+    <div class="modal-content-card" style="max-width: 820px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <span class="tag" style="background: #FF6E40; color: #FFF; font-size: 0.7rem; font-weight: 900; padding: 0.15rem 0.4rem; border-radius: 2px;">CROSSOVER ANALYTICS</span>
+          <span style="font-weight: 800; color: #FFF; font-size: 0.95rem;">ALL STOCKS CROSSOVER FREQUENCY SUMMARY</span>
+        </div>
+        <button onclick="closeCrossoverSummaryModal()" style="background: transparent; border: none; color: var(--bb-text-muted); font-size: 1.2rem; cursor: pointer;">✕</button>
+      </div>
+      <div class="modal-body" style="max-height: 60vh;">
+        <div style="font-size: 0.8rem; color: var(--bb-text-muted); margin-bottom: 0.5rem;">
+          Click any row to filter the Telegram Outbox and view all alerts for that stock:
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="bb-table">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Total Crossovers Today</th>
+                <th>Live Straddle</th>
+                <th>PDH Level</th>
+                <th>Peak Straddle</th>
+                <th>Current Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="crossoverSummaryTableBody">
+              <!-- Dynamically rendered -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCrossoverSummaryModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="app.js?v=20260929_1158"></script>
 </body>
 </html>

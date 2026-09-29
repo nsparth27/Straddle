@@ -4,3 +4,4 @@ node_modules/
 npm-debug.log*
 scrip-master.csv
 github-package/
+config.json
