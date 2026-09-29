@@ -942,7 +942,7 @@ function getStockRealisticProfile(name) {
     'MIDCPNIFTY': { spot: 13714.75, strikeStep: 25, straddlePct: 0.011 },
     'CRUDEOIL': { spot: 6180.00, strikeStep: 50, straddlePct: 0.023 },
     'NATURALGAS': { spot: 238.50, strikeStep: 5, straddlePct: 0.070 },
-    'GOLD': { spot: 148686.00, strikeStep: 100, straddlePct: 0.0125 },
+    'GOLD': { spot: 148689.00, strikeStep: 100, straddlePct: 0.0125 },
     'SILVER': { spot: 225650.00, strikeStep: 500, straddlePct: 0.015 },
     'COPPER': { spot: 824.50, strikeStep: 5, straddlePct: 0.019 }
   };
