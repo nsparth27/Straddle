@@ -717,14 +717,14 @@ async function fetchLiveMcxQuote(securityId) {
         const isGold = securityId == 495213 || securityId == 483079;
         const isSilver = securityId == 495214 || securityId == 483080;
 
-        // Spot quotation: In India, retail MCX gold (10g) = rawLtp / 2 = ~₹74,380.00
-        const spotPrice = (isGold && rawLtp > 100000) ? parseFloat((rawLtp / 2).toFixed(2)) : parseFloat(rawLtp.toFixed(2));
-        const prevCloseSpot = (isGold && prevClose > 100000) ? parseFloat((prevClose / 2).toFixed(2)) : parseFloat(prevClose.toFixed(2));
+        // Contract quotation: Exact futures contract points as displayed on Dhan Web (e.g. GOLD DEC FUT = 148,686.00)
+        const spotPrice = parseFloat(rawLtp.toFixed(2));
+        const prevCloseSpot = parseFloat(prevClose.toFixed(2));
         
         const strikeStep = isGold ? 100 : (isSilver ? 500 : 50);
         const atmStrike = Math.round(spotPrice / strikeStep) * strikeStep;
         
-        const straddlePct = isGold ? 0.0128 : (isSilver ? 0.0155 : 0.023);
+        const straddlePct = isGold ? 0.0125 : (isSilver ? 0.015 : 0.023);
         const straddlePrice = parseFloat((spotPrice * straddlePct).toFixed(2));
         const prevCloseStraddle = parseFloat((prevCloseSpot * straddlePct).toFixed(2));
         const ceLtp = parseFloat((straddlePrice * 0.51).toFixed(2));
@@ -740,8 +740,8 @@ async function fetchLiveMcxQuote(securityId) {
           cePrev: parseFloat((prevCloseStraddle * 0.51).toFixed(2)),
           pePrev: parseFloat((prevCloseStraddle * 0.49).toFixed(2)),
           prevCloseStraddle: prevCloseStraddle > 0 ? prevCloseStraddle : straddlePrice,
-          dayHigh: (isGold && dayHigh > 100000) ? parseFloat((dayHigh / 2).toFixed(2)) : dayHigh,
-          dayLow: (isGold && dayLow > 100000) ? parseFloat((dayLow / 2).toFixed(2)) : dayLow
+          dayHigh: parseFloat(dayHigh.toFixed(2)),
+          dayLow: parseFloat(dayLow.toFixed(2))
         };
       }
     }
@@ -936,14 +936,14 @@ function generateSessionTimeline(segment, currentPrice, pdh, crossoverCount = 0)
 function getStockRealisticProfile(name) {
   const n = name.toUpperCase().trim();
   const EXACT_PRICES = {
-    'NIFTY': { spot: 24850.50, strikeStep: 50, straddlePct: 0.0102 },
-    'BANKNIFTY': { spot: 53200.75, strikeStep: 100, straddlePct: 0.0199 },
-    'FINNIFTY': { spot: 24150.35, strikeStep: 50, straddlePct: 0.0205 },
-    'MIDCPNIFTY': { spot: 12850.30, strikeStep: 25, straddlePct: 0.011 },
+    'NIFTY': { spot: 22631.75, strikeStep: 50, straddlePct: 0.0102 },
+    'BANKNIFTY': { spot: 54169.40, strikeStep: 100, straddlePct: 0.0199 },
+    'FINNIFTY': { spot: 24499.35, strikeStep: 50, straddlePct: 0.0205 },
+    'MIDCPNIFTY': { spot: 13714.75, strikeStep: 25, straddlePct: 0.011 },
     'CRUDEOIL': { spot: 6180.00, strikeStep: 50, straddlePct: 0.023 },
     'NATURALGAS': { spot: 238.50, strikeStep: 5, straddlePct: 0.070 },
-    'GOLD': { spot: 74380.00, strikeStep: 100, straddlePct: 0.0128 },
-    'SILVER': { spot: 91650.00, strikeStep: 500, straddlePct: 0.0155 },
+    'GOLD': { spot: 148686.00, strikeStep: 100, straddlePct: 0.0125 },
+    'SILVER': { spot: 225650.00, strikeStep: 500, straddlePct: 0.015 },
     'COPPER': { spot: 824.50, strikeStep: 5, straddlePct: 0.019 }
   };
   if (EXACT_PRICES[n]) return EXACT_PRICES[n];
