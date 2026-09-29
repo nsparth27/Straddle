@@ -538,16 +538,16 @@ function renderSymbolCard(sym, isMarketOpen) {
   const isCommodity = sym.segment === 'MCX_COMM' || ['CRUDEOIL', 'NATURALGAS', 'GOLD', 'SILVER', 'COPPER'].includes(sym.name);
   const sessionLabel = isMarketOpen ? (isCommodity ? 'MCX STREAM' : 'LIVE STREAM') : 'SETTLED OVERVIEW';
 
-  let sourceText = isCommodity ? `🛢️ MCX ${sessionLabel}` : `🟠 SIMULATED`;
-  let sourceBg = 'rgba(255, 176, 0, 0.1)';
-  let sourceColor = 'var(--bb-amber)';
+  let sourceText = isCommodity ? `🛢️ MCX ${sessionLabel}` : `📊 DHAN SETTLED OVERVIEW`;
+  let sourceBg = 'rgba(0, 229, 255, 0.1)';
+  let sourceColor = 'var(--bb-cyan)';
 
   if (isLive || sym.dataSource === 'DHAN_LIVE') {
-    sourceText = `🟢 DHAN ${sessionLabel}`;
+    sourceText = `🟢 DHAN LIVE STREAM`;
     sourceBg = 'rgba(0, 230, 118, 0.15)';
     sourceColor = 'var(--bb-green)';
-  } else if (sym.dataSource === 'MCX_ESTIMATED' || isCommodity) {
-    sourceText = `🛢️ MCX ${sessionLabel}`;
+  } else if (sym.dataSource === 'DHAN_SETTLED' || !isMarketOpen) {
+    sourceText = isCommodity ? `🛢️ MCX SETTLED OVERVIEW` : `📊 DHAN SETTLED OVERVIEW`;
     sourceBg = 'rgba(0, 229, 255, 0.12)';
     sourceColor = 'var(--bb-cyan)';
   } else if (sym.dataSource === 'SYNCING...') {
@@ -838,11 +838,11 @@ async function fetchStatus() {
         marketText.textContent = '🟢 REGULAR F&O TRADING (09:15 AM – 03:40 PM IST — LIVE)';
       } else {
         marketDot.className = 'dot closed';
-        marketText.textContent = '🌙 MARKET CLOSED — SETTLED OVERVIEW ACTIVE';
+        marketText.textContent = '🌙 MARKET CLOSED — TODAY\'S SETTLED OVERVIEW ACTIVE';
       }
     } else {
       marketDot.className = 'dot closed';
-      marketText.textContent = '🟠 SIMULATION MODE (ENTER DHAN KEYS IN SETTINGS)';
+      marketText.textContent = '🌙 MARKET CLOSED — TODAY\'S SETTLED OVERVIEW ACTIVE';
     }
 
     // 2. Account Funds
@@ -1284,9 +1284,9 @@ function renderModalContent(sym, isMarketOpen) {
   
   const srcBadge = document.getElementById('modalSourceBadge');
   if (srcBadge) {
-    srcBadge.textContent = isLive ? `🟢 DHAN ${sessionLabel}` : (isCommodity ? `🛢️ MCX ${sessionLabel}` : '🟠 SIMULATED');
-    srcBadge.style.color = isLive ? 'var(--bb-green)' : (isCommodity ? 'var(--bb-cyan)' : 'var(--bb-amber)');
-    srcBadge.style.borderColor = isLive ? 'var(--bb-green)' : (isCommodity ? 'var(--bb-cyan)' : 'var(--bb-amber)');
+    srcBadge.textContent = isLive ? `🟢 DHAN LIVE STREAM` : (isCommodity ? `🛢️ MCX SETTLED OVERVIEW` : '📊 DHAN SETTLED OVERVIEW');
+    srcBadge.style.color = isLive ? 'var(--bb-green)' : 'var(--bb-cyan)';
+    srcBadge.style.borderColor = isLive ? 'var(--bb-green)' : 'var(--bb-cyan)';
   }
 
   const crossBadge = document.getElementById('modalCrossBadge');

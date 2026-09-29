@@ -1092,7 +1092,7 @@ async function processSymbol(sym) {
       isLive: false,
       hasReceivedLive: false,
       hasLoadedIntradayOverview: false,
-      dataSource: hasDhanCreds ? 'SYNCING...' : 'SIMULATED'
+      dataSource: isSymbolMarketOpen ? 'SYNCING...' : 'DHAN_SETTLED'
     };
   }
 
@@ -1224,39 +1224,18 @@ async function processSymbol(sym) {
     item.dataSource = 'DHAN_LIVE';
     recomputeCrossovers(item);
   } else {
-    // Fallback when Dhan Option Chain does not list the symbol (e.g. MCX commodity or off-market contract)
-    // Mean-reverting realistic micro-jitter anchored to official standard profile
+    // When Dhan Option Chain is not streaming (e.g. Market Closed / Settled EOD)
     item.isLive = false;
-    item.dataSource = sym.segment === 'MCX_COMM' ? 'MCX_ESTIMATED' : 'SIMULATED';
+    item.dataSource = isSymbolMarketOpen ? 'SYNCING...' : (sym.segment === 'MCX_COMM' ? 'MCX_SETTLED' : 'DHAN_SETTLED');
     
-    // Mean-reversion spot pull
-    const targetSpot = profile.spot;
-    const spotDeviation = (item.spotPrice - targetSpot) / targetSpot;
-    const spotPull = -0.04 * spotDeviation; // smooth mean-reversion
-    const spotJitter = (Math.random() - 0.5) * 0.0015;
-    item.spotPrice = parseFloat((item.spotPrice * (1 + spotPull + spotJitter)).toFixed(2));
-
-    // Mean-reversion straddle pull
-    const targetStraddle = parseFloat((targetSpot * profile.straddlePct).toFixed(2));
-    const straddleDeviation = (item.straddlePrice - targetStraddle) / (targetStraddle || 1);
-    const straddlePull = -0.04 * straddleDeviation;
-    const straddleJitter = (Math.random() - 0.5) * 0.0025;
-    item.straddlePrice = parseFloat(Math.max(0.05, item.straddlePrice * (1 + straddlePull + straddleJitter)).toFixed(2));
-
+    // Strictly preserve official settled values without synthetic random jitter
+    item.spotPrice = profile.spot;
+    const targetStraddle = parseFloat((profile.spot * profile.straddlePct).toFixed(2));
+    item.straddlePrice = targetStraddle;
     item.atmStrike = Math.round(item.spotPrice / profile.strikeStep) * profile.strikeStep;
     item.ceLtp = parseFloat((item.straddlePrice * 0.51).toFixed(2));
     item.peLtp = parseFloat((item.straddlePrice * 0.49).toFixed(2));
 
-    const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
-    const lastPoint = item.history[item.history.length - 1];
-    if (!lastPoint || lastPoint.time !== timeStr) {
-      item.history.push({
-        time: timeStr,
-        price: item.straddlePrice,
-        spot: item.spotPrice
-      });
-      if (item.history.length > 50) item.history.shift();
-    }
     recomputeCrossovers(item);
   }
 

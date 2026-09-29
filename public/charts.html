@@ -1881,9 +1881,9 @@
       document.getElementById('modalSubTitle').textContent = `ATM Strike: ${s.atmStrike} | Security ID: ${s.securityId || '--'}`;
       
       const badge = document.getElementById('modalSourceBadge');
-      badge.textContent = s.isLive ? '🟢 LIVE DHAN STREAM' : '🟠 SIMULATED';
-      badge.style.color = s.isLive ? 'var(--green-up)' : 'var(--amber-accent)';
-      badge.style.borderColor = s.isLive ? 'var(--green-up)' : 'var(--amber-accent)';
+      badge.textContent = s.isLive ? '🟢 LIVE DHAN STREAM' : '📊 DHAN SETTLED OVERVIEW';
+      badge.style.color = s.isLive ? 'var(--green-up)' : 'var(--cyan-glow)';
+      badge.style.borderColor = s.isLive ? 'var(--green-up)' : 'var(--cyan-glow)';
 
       document.getElementById('mValStraddle').textContent = `₹${s.straddlePrice || '0.00'}`;
       document.getElementById('mValStraddle').style.color = isAbove ? 'var(--green-up)' : 'var(--amber-accent)';
