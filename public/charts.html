@@ -1665,7 +1665,7 @@
         filtered.sort((a, b) => b.maxPeakPct - a.maxPeakPct);
       }
 
-      const displayList = filtered.slice(0, 40);
+      const displayList = filtered;
       const maxVal = Math.max(15, ...displayList.map(s => Math.abs(s.pctMove)), ...displayList.map(s => s.maxPeakPct));
 
       if (displayList.length === 0) {

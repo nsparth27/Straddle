@@ -826,7 +826,7 @@ async function fetchStatus() {
     }
 
     const container = document.getElementById('symbolsContainer');
-    const visibleSymbols = symbolList.slice(0, 30);
+    const visibleSymbols = symbolList;
     
     // Clear removed cards
     const visibleNames = new Set(visibleSymbols.map(s => s.name));
@@ -1584,7 +1584,7 @@ function renderRadarLeaderboard(providedSymbolsMap = null) {
     });
   }
 
-  const displayList = filtered.slice(0, 30);
+  const displayList = filtered;
 
   if (displayList.length === 0) {
     container.innerHTML = `
@@ -1925,7 +1925,7 @@ function renderActiveRuleTable(providedSymbolsMap = null) {
     filtered.sort((a, b) => b.maxPeakPct - a.maxPeakPct);
   }
 
-  const displayList = filtered.slice(0, 40);
+  const displayList = filtered;
   const maxVal = Math.max(15, ...displayList.map(s => Math.abs(s.pctMove)), ...displayList.map(s => s.maxPeakPct));
 
   if (displayList.length === 0) {
