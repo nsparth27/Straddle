@@ -3,9 +3,12 @@
   "dhanAccessToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJ1c2VyUmVnaW9uIjoiUjEiLCJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzkwODc2MDc2LCJpYXQiOjE3OTA3ODk2NzYsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTAwNjE2ODc3In0.zjUPVegnF_HmTTgj45Kj90ZLD17K9B0_twCebbuCx4fxxqzl-pXle22GeO3dLDhoYaqgSnQLOtCcr0LN_aNIcw",
   "telegramBotToken": "8874725340:AAEr3RFpWLobnAVKtaqwi6J3rOTYpCHOzl8",
   "telegramChatId": "723433781",
+  "telegramAccount2Enabled": true,
+  "telegramBotToken2": "8870560678:AAH294JrJccfLuCo8sGzWB0da4kkXskImfI",
+  "telegramChatId2": "1353650406",
   "barMinutes": 5,
   "pollIntervalSeconds": 5,
-  "telegramAlertsEnabled": false,
+  "telegramAlertsEnabled": true,
   "watchlist": [
     {
       "name": "NIFTY",
