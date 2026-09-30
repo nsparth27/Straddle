@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="style.css">
   <style>
     .verify-container {
-      max-width: 1700px;
+      max-width: 1750px;
       margin: 0 auto;
       padding: 1.25rem;
       display: flex;
@@ -179,13 +179,46 @@
       color: var(--bb-cyan);
     }
 
-    /* Search & Filter Bar */
-    .filter-bar {
+    /* Comprehensive Filter Matrix */
+    .filter-matrix {
+      background: var(--bb-panel);
+      border: 1px solid var(--bb-panel-border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+
+    .filter-matrix-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 1rem;
       flex-wrap: wrap;
+    }
+
+    .filter-controls-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .filter-select {
+      background: var(--bb-input-bg);
+      border: 1px solid var(--bb-panel-border);
+      color: #FFF;
+      font-family: var(--bb-font);
+      font-size: 0.8rem;
+      padding: 0.45rem 0.75rem;
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .filter-select:focus {
+      border-color: var(--bb-amber);
     }
 
     .search-input {
@@ -196,7 +229,7 @@
       font-size: 0.85rem;
       padding: 0.5rem 0.8rem;
       border-radius: 4px;
-      min-width: 280px;
+      min-width: 260px;
       outline: none;
     }
 
@@ -204,13 +237,26 @@
       border-color: var(--bb-amber);
     }
 
+    .range-input {
+      background: var(--bb-input-bg);
+      border: 1px solid var(--bb-panel-border);
+      color: #FFF;
+      font-family: var(--bb-font);
+      font-size: 0.8rem;
+      padding: 0.4rem 0.6rem;
+      border-radius: 4px;
+      width: 100px;
+      outline: none;
+    }
+
     .segment-filter-tabs {
       display: flex;
       gap: 0.4rem;
+      flex-wrap: wrap;
     }
 
     .seg-btn {
-      background: var(--bb-panel);
+      background: var(--bb-input-bg);
       border: 1px solid var(--bb-panel-border);
       color: var(--bb-text-muted);
       font-family: var(--bb-font);
@@ -219,12 +265,29 @@
       padding: 0.35rem 0.7rem;
       border-radius: 4px;
       cursor: pointer;
+      transition: all 0.15s ease;
     }
 
     .seg-btn.active, .seg-btn:hover {
       background: rgba(255, 176, 0, 0.15);
       border-color: var(--bb-amber);
       color: var(--bb-amber);
+    }
+
+    .btn-reset {
+      background: transparent;
+      border: 1px dashed var(--bb-text-muted);
+      color: var(--bb-text-muted);
+      font-family: var(--bb-font);
+      font-size: 0.75rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .btn-reset:hover {
+      border-color: var(--bb-red);
+      color: var(--bb-red);
     }
 
     /* Data Table */
@@ -253,6 +316,24 @@
       position: sticky;
       top: 0;
       z-index: 10;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+
+    .verify-table th:hover {
+      background: #222736;
+      color: #FFF;
+    }
+
+    .verify-table th .sort-icon {
+      font-size: 0.7rem;
+      margin-left: 0.3rem;
+      color: var(--bb-text-muted);
+    }
+
+    .verify-table th.sorted .sort-icon {
+      color: var(--bb-cyan);
     }
 
     .verify-table th.text-left, .verify-table td.text-left {
@@ -387,7 +468,7 @@
 
   <div class="verify-container">
 
-    <!-- Top Toolbar: Date Picker & Quick Actions -->
+    <!-- Top Toolbar: Date Picker & Actions -->
     <div class="verify-toolbar">
       <div class="toolbar-group">
         <span class="toolbar-label">📅 SELECT TRADING DATE:</span>
@@ -415,7 +496,7 @@
       <div class="kpi-card">
         <div class="kpi-title">TOTAL INSTRUMENTS</div>
         <div class="kpi-value val-amber" id="kpiTotalCount">0</div>
-        <div class="kpi-sub">F&O Equities &amp; Indices</div>
+        <div class="kpi-sub" id="kpiShowingCount">Showing 0 matching</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-title">SELECTED DATE</div>
@@ -436,39 +517,97 @@
       </div>
     </div>
 
-    <!-- Filter & Search Bar -->
-    <div class="filter-bar">
-      <input type="text" id="symbolSearchInput" class="search-input" placeholder="🔍 Search by stock name (e.g. NIFTY, RELIANCE, TCS)..." oninput="applyFilters()">
-      
-      <div class="segment-filter-tabs">
-        <button class="seg-btn active" onclick="setSegmentFilter('ALL', this)">ALL (217+)</button>
-        <button class="seg-btn" onclick="setSegmentFilter('INDICES', this)">INDICES</button>
-        <button class="seg-btn" onclick="setSegmentFilter('EQUITIES', this)">EQUITIES</button>
-        <button class="seg-btn" onclick="setSegmentFilter('MCX', this)">COMMODITIES</button>
-        <button class="seg-btn" onclick="setSegmentFilter('BREAKOUTS', this)">🔥 BREAKOUTS ONLY</button>
+    <!-- Comprehensive Filter Matrix for all Table Columns -->
+    <div class="filter-matrix">
+      <!-- Row 1: Search, Segment, Net Change, and Breakout filters -->
+      <div class="filter-matrix-row">
+        <div class="filter-controls-wrap">
+          <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber);">🔍 SEARCH:</span>
+          <input type="text" id="symbolSearchInput" class="search-input" placeholder="Search by name (e.g. NIFTY, RELIANCE, TCS)..." oninput="applyFilters()">
+          
+          <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">SEGMENT:</span>
+          <select id="filterSegment" class="filter-select" onchange="onSegmentSelect(this.value)">
+            <option value="ALL">All Segments (217+)</option>
+            <option value="INDICES">Indices (IDX_I)</option>
+            <option value="EQUITIES">Equities (NSE_EQ)</option>
+            <option value="MCX">Commodities (MCX)</option>
+          </select>
+
+          <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">NET CHANGE (%):</span>
+          <select id="filterNetChange" class="filter-select" onchange="applyFilters()">
+            <option value="ALL">All Changes</option>
+            <option value="GAINERS">▲ Gainers Only (> 0%)</option>
+            <option value="LOSERS">▼ Losers Only (< 0%)</option>
+            <option value="LARGE_GAINERS">🚀 Large Gainers (≥ +2%)</option>
+            <option value="LARGE_LOSERS">🔻 Large Losers (≤ -2%)</option>
+          </select>
+
+          <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">STATUS:</span>
+          <select id="filterBreakout" class="filter-select" onchange="applyFilters()">
+            <option value="ALL">All Stocks</option>
+            <option value="BREAKOUTS">🔥 PDH Breakouts Only</option>
+            <option value="NORMAL">Normal / Decaying Only</option>
+          </select>
+        </div>
+
+        <button class="btn-reset" onclick="resetAllFilters()">✕ RESET ALL FILTERS</button>
+      </div>
+
+      <!-- Row 2: Segment Quick Buttons and Price Range Filter -->
+      <div class="filter-matrix-row">
+        <div class="segment-filter-tabs">
+          <span style="font-size: 0.75rem; color: var(--bb-text-muted); align-self: center; margin-right: 0.3rem;">QUICK TABS:</span>
+          <button class="seg-btn active" onclick="setSegmentTab('ALL', this)">ALL</button>
+          <button class="seg-btn" onclick="setSegmentTab('INDICES', this)">INDICES</button>
+          <button class="seg-btn" onclick="setSegmentTab('EQUITIES', this)">EQUITIES</button>
+          <button class="seg-btn" onclick="setSegmentTab('MCX', this)">COMMODITIES</button>
+          <button class="seg-btn" onclick="setSegmentTab('BREAKOUTS', this)">🔥 BREAKOUTS ONLY</button>
+        </div>
+
+        <div class="filter-controls-wrap">
+          <span style="font-size: 0.78rem; color: var(--bb-text-muted);">PRICE RANGE ₹:</span>
+          <input type="number" id="minPriceInput" class="range-input" placeholder="Min ₹" oninput="applyFilters()">
+          <span style="color: var(--bb-text-muted);">-</span>
+          <input type="number" id="maxPriceInput" class="range-input" placeholder="Max ₹" oninput="applyFilters()">
+
+          <span style="font-size: 0.78rem; color: var(--bb-text-muted); margin-left: 0.5rem;">SORT BY:</span>
+          <select id="sortColumnSelect" class="filter-select" onchange="onSortSelect(this.value)">
+            <option value="index_asc"># (Default Order)</option>
+            <option value="name_asc">Stock Name (A → Z)</option>
+            <option value="name_desc">Stock Name (Z → A)</option>
+            <option value="pctChange_desc">Net Change % (Highest → Lowest)</option>
+            <option value="pctChange_asc">Net Change % (Lowest → Highest)</option>
+            <option value="todayClose_desc">Today Close ₹ (Highest → Lowest)</option>
+            <option value="todayClose_asc">Today Close ₹ (Lowest → Highest)</option>
+            <option value="prevDayHigh_desc">Prev Day High ₹ (Highest → Lowest)</option>
+            <option value="todayHigh_desc">Today High ₹ (Highest → Lowest)</option>
+            <option value="todayLow_asc">Today Low ₹ (Lowest → Highest)</option>
+            <option value="straddlePrice_desc">Straddle LTP ₹ (Highest → Lowest)</option>
+          </select>
+        </div>
       </div>
     </div>
 
-    <!-- Data Table -->
+    <!-- Data Table with Click-to-Sort Headers -->
     <div class="table-wrapper">
       <table class="verify-table">
         <thead>
           <tr>
-            <th class="text-center">#</th>
-            <th class="text-left">STOCK / INSTRUMENT</th>
-            <th class="text-center">SEGMENT</th>
-            <th class="text-center">DATE</th>
-            <th>PREV DAY HIGH (PDH) ₹</th>
-            <th>PREV DAY CLOSE ₹</th>
-            <th>TODAY OPEN ₹</th>
-            <th>TODAY HIGH ₹</th>
-            <th>TODAY LOW ₹</th>
-            <th>TODAY CLOSE / LTP ₹</th>
-            <th>NET CHANGE (%)</th>
-            <th class="text-center">ATM STRIKE</th>
-            <th>STRADDLE LTP ₹</th>
-            <th>STRADDLE PDH ₹</th>
-            <th class="text-center">BREAKOUT STATUS</th>
+            <th class="text-center" onclick="handleHeaderSort('index')"># <span class="sort-icon" id="sort_index">▲</span></th>
+            <th class="text-left" onclick="handleHeaderSort('name')">STOCK / INSTRUMENT <span class="sort-icon" id="sort_name">⇅</span></th>
+            <th class="text-center" onclick="handleHeaderSort('segment')">SEGMENT <span class="sort-icon" id="sort_segment">⇅</span></th>
+            <th class="text-center" onclick="handleHeaderSort('date')">DATE <span class="sort-icon" id="sort_date">⇅</span></th>
+            <th onclick="handleHeaderSort('prevDayHigh')">PREV DAY HIGH (PDH) ₹ <span class="sort-icon" id="sort_prevDayHigh">⇅</span></th>
+            <th onclick="handleHeaderSort('prevDayClose')">PREV DAY CLOSE ₹ <span class="sort-icon" id="sort_prevDayClose">⇅</span></th>
+            <th onclick="handleHeaderSort('todayOpen')">TODAY OPEN ₹ <span class="sort-icon" id="sort_todayOpen">⇅</span></th>
+            <th onclick="handleHeaderSort('todayHigh')">TODAY HIGH ₹ <span class="sort-icon" id="sort_todayHigh">⇅</span></th>
+            <th onclick="handleHeaderSort('todayLow')">TODAY LOW ₹ <span class="sort-icon" id="sort_todayLow">⇅</span></th>
+            <th onclick="handleHeaderSort('todayClose')">TODAY CLOSE / LTP ₹ <span class="sort-icon" id="sort_todayClose">⇅</span></th>
+            <th onclick="handleHeaderSort('pctChange')">NET CHANGE (%) <span class="sort-icon" id="sort_pctChange">⇅</span></th>
+            <th class="text-center" onclick="handleHeaderSort('atmStrike')">ATM STRIKE <span class="sort-icon" id="sort_atmStrike">⇅</span></th>
+            <th onclick="handleHeaderSort('straddlePrice')">STRADDLE LTP ₹ <span class="sort-icon" id="sort_straddlePrice">⇅</span></th>
+            <th onclick="handleHeaderSort('prevDayHighStraddle')">STRADDLE PDH ₹ <span class="sort-icon" id="sort_prevDayHighStraddle">⇅</span></th>
+            <th class="text-center" onclick="handleHeaderSort('isBreakout')">BREAKOUT STATUS <span class="sort-icon" id="sort_isBreakout">⇅</span></th>
             <th class="text-center">ACTIONS</th>
           </tr>
         </thead>
@@ -493,6 +632,8 @@
     let filteredDataset = [];
     let currentDate = '';
     let currentSegment = 'ALL';
+    let currentSortKey = 'index';
+    let currentSortDir = 'asc'; // 'asc' | 'desc'
     const TERMINAL_PIN = '2712';
     const PIN_KEY = 'dhan_terminal_token';
 
@@ -574,7 +715,7 @@
         const json = await res.json();
 
         if (json.status === 'success' && Array.isArray(json.data)) {
-          rawDataset = json.data;
+          rawDataset = json.data.map((item, idx) => ({ ...item, index: idx + 1 }));
           currentDate = json.targetDate || targetDate;
           
           document.getElementById('selectedDateInput').value = currentDate;
@@ -600,24 +741,99 @@
       return Number(num).toLocaleString('en-IN', { minimumFractionDigits: dec, maximumFractionDigits: dec });
     }
 
-    // Apply Filters & Search
+    // Click-to-Sort Handler on Table Column Headers
+    function handleHeaderSort(colKey) {
+      if (currentSortKey === colKey) {
+        currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSortKey = colKey;
+        currentSortDir = ['name', 'segment', 'date'].includes(colKey) ? 'asc' : 'desc';
+      }
+      updateSortHeaderIcons();
+      applyFilters();
+    }
+
+    function onSortSelect(val) {
+      const parts = val.split('_');
+      currentSortKey = parts[0];
+      currentSortDir = parts[1] || 'asc';
+      updateSortHeaderIcons();
+      applyFilters();
+    }
+
+    function updateSortHeaderIcons() {
+      const keys = ['index', 'name', 'segment', 'date', 'prevDayHigh', 'prevDayClose', 'todayOpen', 'todayHigh', 'todayLow', 'todayClose', 'pctChange', 'atmStrike', 'straddlePrice', 'prevDayHighStraddle', 'isBreakout'];
+      keys.forEach(k => {
+        const iconEl = document.getElementById(`sort_${k}`);
+        if (iconEl) {
+          if (k === currentSortKey) {
+            iconEl.textContent = currentSortDir === 'asc' ? '▲' : '▼';
+            iconEl.parentElement.classList.add('sorted');
+          } else {
+            iconEl.textContent = '⇅';
+            iconEl.parentElement.classList.remove('sorted');
+          }
+        }
+      });
+    }
+
+    // Apply All Filters & Sorting
     function applyFilters() {
-      const query = (document.getElementById('symbolSearchInput').value || '').toUpperCase().trim();
+      const searchVal = (document.getElementById('symbolSearchInput').value || '').toUpperCase().trim();
+      const segVal = document.getElementById('filterSegment').value;
+      const netChangeVal = document.getElementById('filterNetChange').value;
+      const breakoutVal = document.getElementById('filterBreakout').value;
+      const minPrice = parseFloat(document.getElementById('minPriceInput').value) || null;
+      const maxPrice = parseFloat(document.getElementById('maxPriceInput').value) || null;
 
       filteredDataset = rawDataset.filter(item => {
-        // Search filter
-        if (query && !item.name.includes(query)) return false;
+        // 1. Search filter
+        if (searchVal && !item.name.includes(searchVal)) return false;
 
-        // Segment filter
-        if (currentSegment === 'INDICES') return item.segment === 'IDX_I';
-        if (currentSegment === 'EQUITIES') return item.segment === 'NSE_EQ';
-        if (currentSegment === 'MCX') return item.segment === 'MCX_COMM' || ['CRUDEOIL', 'GOLD', 'SILVER', 'NATURALGAS', 'COPPER'].includes(item.name);
-        if (currentSegment === 'BREAKOUTS') return item.isBreakout;
+        // 2. Segment filter
+        const seg = item.segment;
+        const isMcx = seg === 'MCX_COMM' || ['CRUDEOIL', 'GOLD', 'SILVER', 'NATURALGAS', 'COPPER'].includes(item.name);
+        if (segVal === 'INDICES' && seg !== 'IDX_I') return false;
+        if (segVal === 'EQUITIES' && (seg !== 'NSE_EQ' || isMcx)) return false;
+        if (segVal === 'MCX' && !isMcx) return false;
+
+        // 3. Net Change filter
+        const chg = item.pctChange || 0;
+        if (netChangeVal === 'GAINERS' && chg <= 0) return false;
+        if (netChangeVal === 'LOSERS' && chg >= 0) return false;
+        if (netChangeVal === 'LARGE_GAINERS' && chg < 2) return false;
+        if (netChangeVal === 'LARGE_LOSERS' && chg > -2) return false;
+
+        // 4. Breakout filter
+        if (breakoutVal === 'BREAKOUTS' && !item.isBreakout) return false;
+        if (breakoutVal === 'NORMAL' && item.isBreakout) return false;
+
+        // 5. Price Range filter
+        const closePrice = item.todayClose || 0;
+        if (minPrice !== null && closePrice < minPrice) return false;
+        if (maxPrice !== null && closePrice > maxPrice) return false;
 
         return true;
       });
 
+      // Sorting
+      filteredDataset.sort((a, b) => {
+        let valA = a[currentSortKey];
+        let valB = b[currentSortKey];
+
+        if (typeof valA === 'string') {
+          valA = valA.toLowerCase();
+          valB = (valB || '').toLowerCase();
+          return currentSortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        }
+
+        valA = Number(valA) || 0;
+        valB = Number(valB) || 0;
+        return currentSortDir === 'asc' ? valA - valB : valB - valA;
+      });
+
       renderTable();
+      document.getElementById('kpiShowingCount').textContent = `Showing ${filteredDataset.length} matching`;
     }
 
     // Render Table
@@ -639,7 +855,7 @@
 
         html += `
           <tr>
-            <td class="text-center" style="color: var(--bb-text-muted);">${idx + 1}</td>
+            <td class="text-center" style="color: var(--bb-text-muted); font-size: 0.75rem;">${row.index}</td>
             <td class="text-left" style="font-weight: 800; color: var(--bb-amber);">
               <a href="index.html" style="color: inherit; text-decoration: none;" title="View in Terminal">${row.name}</a>
             </td>
@@ -682,6 +898,43 @@
       document.getElementById('kpiDeclines').textContent = `${declines} ▼`;
     }
 
+    // Quick Segment Tabs & Dropdowns
+    function setSegmentTab(seg, btn) {
+      document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      if (seg === 'BREAKOUTS') {
+        document.getElementById('filterBreakout').value = 'BREAKOUTS';
+        document.getElementById('filterSegment').value = 'ALL';
+      } else {
+        document.getElementById('filterBreakout').value = 'ALL';
+        document.getElementById('filterSegment').value = seg;
+      }
+      applyFilters();
+    }
+
+    function onSegmentSelect(val) {
+      document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+      applyFilters();
+    }
+
+    function resetAllFilters() {
+      document.getElementById('symbolSearchInput').value = '';
+      document.getElementById('filterSegment').value = 'ALL';
+      document.getElementById('filterNetChange').value = 'ALL';
+      document.getElementById('filterBreakout').value = 'ALL';
+      document.getElementById('minPriceInput').value = '';
+      document.getElementById('maxPriceInput').value = '';
+      document.getElementById('sortColumnSelect').value = 'index_asc';
+      currentSortKey = 'index';
+      currentSortDir = 'asc';
+      updateSortHeaderIcons();
+      document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector('.seg-btn').classList.add('active');
+      applyFilters();
+      showToast('🔄 Filters reset to default');
+    }
+
     // Quick Date Helpers
     function setQuickDate(type) {
       document.querySelectorAll('.quick-date-btn').forEach(b => b.classList.remove('active'));
@@ -715,13 +968,6 @@
     function onDateChanged(val) {
       document.querySelectorAll('.quick-date-btn').forEach(b => b.classList.remove('active'));
       if (val) loadVerificationData(val);
-    }
-
-    function setSegmentFilter(seg, btn) {
-      currentSegment = seg;
-      document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      applyFilters();
     }
 
     // Sync All from Header
