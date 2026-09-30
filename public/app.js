@@ -105,7 +105,8 @@ function switchTab(tabId) {
     alerts: 'tabBtnAlerts',
     settings: 'tabBtnSettings',
     radar: 'tabBtnRadar',
-    charts: 'tabBtnCharts'
+    charts: 'tabBtnCharts',
+    verify: 'tabBtnVerify'
   };
 
   const targetBtn = document.getElementById(tabBtnMap[tabId]) ||
@@ -119,6 +120,8 @@ function switchTab(tabId) {
     renderRadarLeaderboard();
   } else if (tabId === 'charts') {
     renderActiveRuleTable();
+  } else if (tabId === 'verify') {
+    loadVerificationData(currentVerifyDate);
   }
 }
 
@@ -155,6 +158,9 @@ async function loadSettings() {
       const tokenEl = document.getElementById('cfgDhanAccessToken');
       const botTokenEl = document.getElementById('cfgTelegramBotToken');
       const chatIdEl = document.getElementById('cfgTelegramChatId');
+      const acc2EnabledEl = document.getElementById('cfgTelegramAccount2Enabled');
+      const botToken2El = document.getElementById('cfgTelegramBotToken2');
+      const chatId2El = document.getElementById('cfgTelegramChatId2');
       const barMinEl = document.getElementById('cfgBarMinutes');
       const pollIntEl = document.getElementById('cfgPollInterval');
       const tgAlertsEl = document.getElementById('cfgTelegramAlertsEnabled');
@@ -163,12 +169,29 @@ async function loadSettings() {
       if (tokenEl && cfg.dhanAccessToken !== undefined) tokenEl.value = cfg.dhanAccessToken;
       if (botTokenEl && cfg.telegramBotToken !== undefined) botTokenEl.value = cfg.telegramBotToken;
       if (chatIdEl && cfg.telegramChatId !== undefined) chatIdEl.value = cfg.telegramChatId;
+      if (acc2EnabledEl && cfg.telegramAccount2Enabled !== undefined) acc2EnabledEl.checked = Boolean(cfg.telegramAccount2Enabled);
+      if (botToken2El && cfg.telegramBotToken2 !== undefined) botToken2El.value = cfg.telegramBotToken2;
+      if (chatId2El && cfg.telegramChatId2 !== undefined) chatId2El.value = cfg.telegramChatId2;
       if (barMinEl && cfg.barMinutes !== undefined) barMinEl.value = cfg.barMinutes;
       if (pollIntEl && cfg.pollIntervalSeconds !== undefined) pollIntEl.value = cfg.pollIntervalSeconds;
       if (tgAlertsEl && cfg.telegramAlertsEnabled !== undefined) tgAlertsEl.checked = Boolean(cfg.telegramAlertsEnabled);
       
       const countEl = document.getElementById('fnoCountLabel');
       if (countEl) countEl.textContent = `${(cfg.watchlist || []).length} F&O STOCKS ACTIVE`;
+
+      // Update Account 2 Diagnostics pill
+      const diagTelegram2 = document.getElementById('diagTelegram2');
+      if (diagTelegram2) {
+        if (cfg.telegramAccount2Enabled && cfg.telegramChatId2) {
+          diagTelegram2.className = 'stat-val';
+          diagTelegram2.style.color = 'var(--bb-green)';
+          diagTelegram2.textContent = `Active (${cfg.telegramChatId2})`;
+        } else {
+          diagTelegram2.className = 'stat-val';
+          diagTelegram2.style.color = 'var(--bb-text-muted)';
+          diagTelegram2.textContent = 'Disabled / Not Configured';
+        }
+      }
     }
   } catch (err) {
     console.error('Failed to load settings:', err);
@@ -201,6 +224,9 @@ if (settingsFormEl) settingsFormEl.addEventListener('submit', async (e) => {
     dhanAccessToken: document.getElementById('cfgDhanAccessToken').value.trim(),
     telegramBotToken: document.getElementById('cfgTelegramBotToken').value.trim(),
     telegramChatId: document.getElementById('cfgTelegramChatId').value.trim(),
+    telegramAccount2Enabled: document.getElementById('cfgTelegramAccount2Enabled')?.checked || false,
+    telegramBotToken2: document.getElementById('cfgTelegramBotToken2')?.value.trim() || '',
+    telegramChatId2: document.getElementById('cfgTelegramChatId2')?.value.trim() || '',
     telegramAlertsEnabled: document.getElementById('cfgTelegramAlertsEnabled').checked,
     barMinutes: parseInt(document.getElementById('cfgBarMinutes').value, 10),
     pollIntervalSeconds: parseInt(document.getElementById('cfgPollInterval').value, 10)
@@ -214,7 +240,7 @@ if (settingsFormEl) settingsFormEl.addEventListener('submit', async (e) => {
     });
     const data = await res.json();
     if (res.ok) {
-      if (toast) { toast.className = 'alert-toast success'; toast.textContent = '✅ Settings saved successfully! Credentials stored securely.'; toast.style.display = 'block'; }
+      if (toast) { toast.className = 'alert-toast success'; toast.textContent = '✅ Settings saved successfully! Dual account credentials stored securely.'; toast.style.display = 'block'; }
       // Reload settings to ensure UI stays perfectly synchronized
       await loadSettings();
     } else {
@@ -225,21 +251,29 @@ if (settingsFormEl) settingsFormEl.addEventListener('submit', async (e) => {
   }
 });
 
-// Run Diagnostics Connection Test
+// Run Diagnostics Connection Test (Tests Account 1 & Account 2)
 async function runConnectionTest() {
   const diagDhan = document.getElementById('diagDhan');
   const diagTelegram = document.getElementById('diagTelegram');
+  const diagTelegram2 = document.getElementById('diagTelegram2');
 
   diagDhan.innerHTML = 'Testing Dhan Trading & Data API...';
   diagDhan.className = 'diag-result info';
-  diagTelegram.innerHTML = 'Testing Telegram Bot connection...';
+  diagTelegram.innerHTML = 'Testing Telegram Account 1...';
   diagTelegram.className = 'diag-result info';
+  if (diagTelegram2) {
+    diagTelegram2.innerHTML = 'Testing Telegram Account 2...';
+    diagTelegram2.className = 'diag-result info';
+  }
 
   const payload = {
     dhanClientId: document.getElementById('cfgDhanClientId').value.trim(),
     dhanAccessToken: document.getElementById('cfgDhanAccessToken').value.trim(),
     telegramBotToken: document.getElementById('cfgTelegramBotToken').value.trim(),
-    telegramChatId: document.getElementById('cfgTelegramChatId').value.trim()
+    telegramChatId: document.getElementById('cfgTelegramChatId').value.trim(),
+    telegramAccount2Enabled: document.getElementById('cfgTelegramAccount2Enabled')?.checked || false,
+    telegramBotToken2: document.getElementById('cfgTelegramBotToken2')?.value.trim() || '',
+    telegramChatId2: document.getElementById('cfgTelegramChatId2')?.value.trim() || ''
   };
 
   try {
@@ -260,16 +294,34 @@ async function runConnectionTest() {
 
     if (data.telegram?.status === 'success') {
       diagTelegram.className = 'diag-result success';
-      diagTelegram.innerHTML = `✅ <b>TELEGRAM BOT OK:</b> ${data.telegram.message}`;
+      diagTelegram.innerHTML = `✅ <b>ACC 1 OK:</b> ${data.telegram.message}`;
     } else {
       diagTelegram.className = 'diag-result error';
-      diagTelegram.innerHTML = `❌ <b>TELEGRAM ERROR:</b> ${data.telegram?.message || 'Connection failed'}`;
+      diagTelegram.innerHTML = `❌ <b>ACC 1 ERROR:</b> ${data.telegram?.message || 'Connection failed'}`;
+    }
+
+    if (diagTelegram2) {
+      if (data.telegram2?.status === 'success') {
+        diagTelegram2.className = 'diag-result success';
+        diagTelegram2.innerHTML = `✅ <b>ACC 2 OK:</b> ${data.telegram2.message}`;
+      } else if (data.telegram2?.status === 'not_configured') {
+        diagTelegram2.className = 'diag-result';
+        diagTelegram2.style.color = 'var(--bb-text-muted)';
+        diagTelegram2.innerHTML = `⚪ Account 2 not enabled`;
+      } else {
+        diagTelegram2.className = 'diag-result error';
+        diagTelegram2.innerHTML = `❌ <b>ACC 2 ERROR:</b> ${data.telegram2?.message || 'Connection failed'}`;
+      }
     }
   } catch (err) {
     diagDhan.className = 'diag-result error';
     diagDhan.innerHTML = `❌ Dhan Test Failed: ${err.message}`;
     diagTelegram.className = 'diag-result error';
     diagTelegram.innerHTML = `❌ Telegram Test Failed: ${err.message}`;
+    if (diagTelegram2) {
+      diagTelegram2.className = 'diag-result error';
+      diagTelegram2.innerHTML = `❌ Telegram Test Failed: ${err.message}`;
+    }
   }
 }
 
@@ -961,12 +1013,27 @@ function renderTelegramMessagesTable() {
     const crossClass = crossNum === 1 ? 'crossover-1' : (crossNum === 2 ? 'crossover-2' : 'crossover-3');
 
     let tickBadgeHtml = '';
-    if (isDelivered) {
-      tickBadgeHtml = `<span class="tick-badge tick-delivered" title="Delivered to Telegram User (Chat ID: ${m.chatId})"><span class="tick-double-icon">✓✓</span> DELIVERED</span>`;
-    } else if (isSending) {
-      tickBadgeHtml = `<span class="tick-badge tick-sending" title="Sending to Telegram"><span style="font-weight:900">✓</span> SENDING...</span>`;
+    const acc1 = m.account1;
+    const acc2 = m.account2;
+
+    if (acc2) {
+      const a1Delivered = acc1?.status === 'delivered';
+      const a2Delivered = acc2?.status === 'delivered';
+      const a1Sending = acc1?.status === 'pending';
+      const a2Sending = acc2?.status === 'pending';
+
+      const a1Html = a1Delivered ? '<span style="color:var(--bb-green);" title="Acc 1 Delivered">A1:✓✓</span>' : (a1Sending ? '<span style="color:var(--bb-amber);">A1:⏳</span>' : '<span style="color:var(--bb-red);">A1:❌</span>');
+      const a2Html = a2Delivered ? '<span style="color:var(--bb-green);" title="Acc 2 Delivered">A2:✓✓</span>' : (a2Sending ? '<span style="color:var(--bb-amber);">A2:⏳</span>' : '<span style="color:var(--bb-red);">A2:❌</span>');
+
+      tickBadgeHtml = `<div style="display:flex; gap:0.35rem; font-size:0.75rem; font-weight:800;">${a1Html} | ${a2Html}</div>`;
     } else {
-      tickBadgeHtml = `<span class="tick-badge tick-failed" title="${m.error || 'Delivery Error'}">❌ FAILED</span>`;
+      if (isDelivered) {
+        tickBadgeHtml = `<span class="tick-badge tick-delivered" title="Delivered to Telegram User (Chat ID: ${m.chatId})"><span class="tick-double-icon">✓✓</span> DELIVERED</span>`;
+      } else if (isSending) {
+        tickBadgeHtml = `<span class="tick-badge tick-sending" title="Sending to Telegram"><span style="font-weight:900">✓</span> SENDING...</span>`;
+      } else {
+        tickBadgeHtml = `<span class="tick-badge tick-failed" title="${m.error || 'Delivery Error'}">❌ FAILED</span>`;
+      }
     }
 
     return `
@@ -1620,7 +1687,7 @@ function renderRadarLeaderboard(providedSymbolsMap = null) {
   }).join('');
 }
 
-// Global Keyboard Shortcuts (Escape to close modals, F1-F5 to switch workspace tabs)
+// Global Keyboard Shortcuts (Escape to close modals, F1-F6 to switch workspace tabs)
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closePreviewModal();
@@ -1642,6 +1709,9 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'F5') {
     e.preventDefault();
     switchTab('charts');
+  } else if (e.key === 'F6') {
+    e.preventDefault();
+    switchTab('verify');
   }
 });
 
@@ -2064,5 +2134,511 @@ function renderQuantBloombergCanvas() {
 
 // Start Live Status Polling
 setInterval(fetchStatus, 2000);
+
+// =========================================================================
+// 📋 TAB 6: DATA VERIFIER & HISTORICAL CSV ENGINE
+// =========================================================================
+let verifyDataset = [];
+let currentVerifyDate = '';
+let verifySortColumn = 'index';
+let verifySortDirection = 'asc';
+let verifyFilterSegment = 'ALL';
+let verifyFilterNetChange = 'ALL';
+let verifyFilterBreakout = 'ALL';
+let verifyPctPreset = 'ALL';
+let isVerifyFiltersCollapsed = false;
+
+function formatVerifyCurrency(val) {
+  if (val == null || isNaN(val) || val === 0) return '₹0.00';
+  return '₹' + Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatVerifyPct(val) {
+  if (val == null || isNaN(val)) return '0.00%';
+  const n = Number(val);
+  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+}
+
+// Load verification dataset from Dhan real-time feed or historical daily OHLC
+async function loadVerificationData(targetDate = '') {
+  const tbody = document.getElementById('verifyTableBody');
+  if (tbody) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="18" style="text-align: center; padding: 3rem; color: var(--bb-cyan); font-weight: 700;">
+          <span style="display: inline-block; animation: spin 1s linear infinite;">🔄</span> Fetching authentic Dhan Marketfeed OHLC dataset for ${targetDate || 'Today'}...
+        </td>
+      </tr>
+    `;
+  }
+
+  try {
+    const url = targetDate ? `/api/verify-data?date=${encodeURIComponent(targetDate)}` : '/api/verify-data';
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch data`);
+    const data = await res.json();
+
+    if (data.status === 'success' && Array.isArray(data.data)) {
+      currentVerifyDate = data.targetDate;
+      const dateInput = document.getElementById('verifyDateInput');
+      if (dateInput && currentVerifyDate) {
+        dateInput.value = currentVerifyDate;
+      }
+
+      verifyDataset = data.data.map((item, idx) => {
+        const pdh = item.prevDayHigh || 1;
+        const pdhPctDiff = pdh > 0 ? (((item.todayHigh - pdh) / pdh) * 100) : 0;
+        const dayRangePct = (item.todayLow && item.todayLow > 0) ? (((item.todayHigh - item.todayLow) / item.todayLow) * 100) : 0;
+
+        return {
+          ...item,
+          index: idx + 1,
+          pdhPctDiff: parseFloat(pdhPctDiff.toFixed(2)),
+          dayRangePct: parseFloat(dayRangePct.toFixed(2)),
+          highVsPdhDiff: parseFloat((item.todayHigh - pdh).toFixed(2))
+        };
+      });
+
+      updateVerifyKpis();
+      renderVerificationTable();
+      showToast(`Loaded ${verifyDataset.length} instruments for ${currentVerifyDate}`, 'success');
+    } else {
+      throw new Error(data.message || 'Malformed dataset returned');
+    }
+  } catch (err) {
+    if (tbody) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="18" style="text-align: center; padding: 3rem; color: var(--bb-red); font-weight: 700;">
+            ❌ Failed to load verification data: ${err.message}. Please verify your Dhan Access Token in Settings.
+          </td>
+        </tr>
+      `;
+    }
+    showToast(`Error: ${err.message}`, 'error');
+  }
+}
+
+function updateVerifyKpis() {
+  const total = verifyDataset.length;
+  const breakouts = verifyDataset.filter(d => d.todayHigh > d.prevDayHigh).length;
+  const advances = verifyDataset.filter(d => d.pctChange > 0).length;
+  const declines = verifyDataset.filter(d => d.pctChange < 0).length;
+
+  const sumPct = verifyDataset.reduce((acc, curr) => acc + (curr.pctChange || 0), 0);
+  const avgPct = total > 0 ? (sumPct / total).toFixed(2) : '0.00';
+
+  const elTot = document.getElementById('verifyKpiTotalCount');
+  if (elTot) elTot.textContent = total;
+
+  const elDate = document.getElementById('verifyKpiTargetDate');
+  if (elDate) elDate.textContent = currentVerifyDate || '--';
+
+  const elPrev = document.getElementById('verifyKpiPrevDateLabel');
+  if (elPrev) {
+    const firstPrev = verifyDataset.find(d => d.prevDate && d.prevDate !== 'PREV_SESSION')?.prevDate;
+    elPrev.textContent = `Prev Date: ${firstPrev || 'PREV_SESSION'}`;
+  }
+
+  const elBrk = document.getElementById('verifyKpiBreakoutCount');
+  if (elBrk) elBrk.textContent = breakouts;
+
+  const elAdv = document.getElementById('verifyKpiAdvances');
+  if (elAdv) elAdv.textContent = advances;
+
+  const elDec = document.getElementById('verifyKpiDeclines');
+  if (elDec) elDec.textContent = declines;
+
+  const elAvg = document.getElementById('verifyKpiAvgPct');
+  if (elAvg) {
+    elAvg.textContent = (avgPct >= 0 ? '+' : '') + avgPct + '%';
+    elAvg.className = 'kpi-value ' + (avgPct >= 0 ? 'val-up' : 'val-down');
+  }
+}
+
+function toggleVerifyFilterMatrix() {
+  isVerifyFiltersCollapsed = !isVerifyFiltersCollapsed;
+  const box = document.getElementById('verifyFilterMatrixBox');
+  const icon = document.getElementById('verifyFilterBtnIcon');
+  const text = document.getElementById('verifyFilterBtnText');
+  const toggleIcon = document.getElementById('verifyFilterToggleIcon');
+  const hint = document.getElementById('verifyFilterCollapseHint');
+
+  if (box) {
+    if (isVerifyFiltersCollapsed) {
+      box.classList.add('collapsed');
+      if (icon) icon.textContent = '🔽';
+      if (text) text.textContent = 'SHOW FILTERS';
+      if (toggleIcon) toggleIcon.textContent = '▶';
+      if (hint) hint.textContent = '[ CLICK TO EXPAND ]';
+    } else {
+      box.classList.remove('collapsed');
+      if (icon) icon.textContent = '🔼';
+      if (text) text.textContent = 'HIDE FILTERS';
+      if (toggleIcon) toggleIcon.textContent = '▼';
+      if (hint) hint.textContent = '[ CLICK TO HIDE ]';
+    }
+  }
+}
+
+function setVerifyPctPreset(preset, btn) {
+  verifyPctPreset = preset;
+  document.querySelectorAll('.pct-filter-tabs .pct-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  const minInput = document.getElementById('verifyMinPctInput');
+  const maxInput = document.getElementById('verifyMaxPctInput');
+
+  if (minInput) minInput.value = '';
+  if (maxInput) maxInput.value = '';
+
+  if (preset === '+1') { if (minInput) minInput.value = 1.0; }
+  else if (preset === '+2') { if (minInput) minInput.value = 2.0; }
+  else if (preset === '+3') { if (minInput) minInput.value = 3.0; }
+  else if (preset === '-1') { if (maxInput) maxInput.value = -1.0; }
+  else if (preset === '-2') { if (maxInput) maxInput.value = -2.0; }
+  else if (preset === '-3') { if (maxInput) maxInput.value = -3.0; }
+
+  applyVerifyFilters();
+}
+
+function resetAllVerifyFilters() {
+  const searchInput = document.getElementById('verifySymbolSearchInput');
+  if (searchInput) searchInput.value = '';
+
+  const segSelect = document.getElementById('verifyFilterSegment');
+  if (segSelect) segSelect.value = 'ALL';
+
+  const netSelect = document.getElementById('verifyFilterNetChange');
+  if (netSelect) netSelect.value = 'ALL';
+
+  const brkSelect = document.getElementById('verifyFilterBreakout');
+  if (brkSelect) brkSelect.value = 'ALL';
+
+  const minPct = document.getElementById('verifyMinPctInput');
+  if (minPct) minPct.value = '';
+
+  const maxPct = document.getElementById('verifyMaxPctInput');
+  if (maxPct) maxPct.value = '';
+
+  const minPrice = document.getElementById('verifyMinPriceInput');
+  if (minPrice) minPrice.value = '';
+
+  const maxPrice = document.getElementById('verifyMaxPriceInput');
+  if (maxPrice) maxPrice.value = '';
+
+  const sortSelect = document.getElementById('verifySortColumnSelect');
+  if (sortSelect) sortSelect.value = 'index_asc';
+
+  verifySortColumn = 'index';
+  verifySortDirection = 'asc';
+  verifyPctPreset = 'ALL';
+
+  document.querySelectorAll('.pct-filter-tabs .pct-btn').forEach(b => b.classList.remove('active'));
+  const allPctBtn = document.querySelector('.pct-filter-tabs .pct-btn');
+  if (allPctBtn) allPctBtn.classList.add('active');
+
+  applyVerifyFilters();
+  showToast('All verifier search filters reset', 'success');
+}
+
+function handleVerifyHeaderSort(column) {
+  if (verifySortColumn === column) {
+    verifySortDirection = verifySortDirection === 'asc' ? 'desc' : 'asc';
+  } else {
+    verifySortColumn = column;
+    verifySortDirection = (column === 'name' || column === 'segment' || column === 'date' || column === 'index') ? 'asc' : 'desc';
+  }
+  renderVerificationTable();
+}
+
+function onVerifySortSelect(val) {
+  const parts = val.split('_');
+  verifySortColumn = parts[0];
+  verifySortDirection = parts[1] || 'asc';
+  renderVerificationTable();
+}
+
+function applyVerifyFilters() {
+  renderVerificationTable();
+}
+
+function renderVerificationTable() {
+  const tbody = document.getElementById('verifyTableBody');
+  if (!tbody) return;
+
+  const searchVal = (document.getElementById('verifySymbolSearchInput')?.value || '').toUpperCase().trim();
+  const segmentVal = document.getElementById('verifyFilterSegment')?.value || 'ALL';
+  const netChangeVal = document.getElementById('verifyFilterNetChange')?.value || 'ALL';
+  const breakoutVal = document.getElementById('verifyFilterBreakout')?.value || 'ALL';
+
+  const minPctVal = parseFloat(document.getElementById('verifyMinPctInput')?.value);
+  const maxPctVal = parseFloat(document.getElementById('verifyMaxPctInput')?.value);
+  const minPriceVal = parseFloat(document.getElementById('verifyMinPriceInput')?.value);
+  const maxPriceVal = parseFloat(document.getElementById('verifyMaxPriceInput')?.value);
+
+  // Active filter count badge
+  let activeCount = 0;
+  if (searchVal) activeCount++;
+  if (segmentVal !== 'ALL') activeCount++;
+  if (netChangeVal !== 'ALL') activeCount++;
+  if (breakoutVal !== 'ALL') activeCount++;
+  if (!isNaN(minPctVal) || !isNaN(maxPctVal)) activeCount++;
+  if (!isNaN(minPriceVal) || !isNaN(maxPriceVal)) activeCount++;
+
+  const badgeEl = document.getElementById('verifyActiveFilterBadge');
+  if (badgeEl) {
+    if (activeCount > 0) {
+      badgeEl.style.display = 'inline-flex';
+      badgeEl.textContent = `${activeCount} Filter${activeCount > 1 ? 's' : ''} Active`;
+    } else {
+      badgeEl.style.display = 'none';
+    }
+  }
+
+  let filtered = [...verifyDataset];
+
+  // 1. Search Query
+  if (searchVal) {
+    filtered = filtered.filter(item => item.name.includes(searchVal) || (COMPANY_NAMES[item.name] || '').toUpperCase().includes(searchVal));
+  }
+
+  // 2. Segment Filter
+  if (segmentVal === 'INDICES') {
+    filtered = filtered.filter(item => item.segment === 'IDX_I' || ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'].includes(item.name));
+  } else if (segmentVal === 'EQUITIES') {
+    filtered = filtered.filter(item => item.segment === 'NSE_EQ');
+  } else if (segmentVal === 'MCX') {
+    filtered = filtered.filter(item => item.segment === 'MCX_COMM' || ['CRUDEOIL', 'NATURALGAS', 'GOLD', 'SILVER', 'COPPER'].includes(item.name));
+  }
+
+  // 3. Net Change % Filter
+  if (netChangeVal === 'GAINERS') filtered = filtered.filter(item => item.pctChange > 0);
+  else if (netChangeVal === 'LOSERS') filtered = filtered.filter(item => item.pctChange < 0);
+  else if (netChangeVal === 'PLUS_1') filtered = filtered.filter(item => item.pctChange >= 1.0);
+  else if (netChangeVal === 'PLUS_2') filtered = filtered.filter(item => item.pctChange >= 2.0);
+  else if (netChangeVal === 'PLUS_3') filtered = filtered.filter(item => item.pctChange >= 3.0);
+  else if (netChangeVal === 'MINUS_1') filtered = filtered.filter(item => item.pctChange <= -1.0);
+  else if (netChangeVal === 'MINUS_2') filtered = filtered.filter(item => item.pctChange <= -2.0);
+  else if (netChangeVal === 'MINUS_3') filtered = filtered.filter(item => item.pctChange <= -3.0);
+
+  // 4. Breakout Filter
+  if (breakoutVal === 'BREAKOUTS') filtered = filtered.filter(item => item.todayHigh > item.prevDayHigh);
+  else if (breakoutVal === 'NEAR_BREAKOUT') filtered = filtered.filter(item => item.todayHigh <= item.prevDayHigh && item.pdhPctDiff >= -1.5);
+  else if (breakoutVal === 'NORMAL') filtered = filtered.filter(item => item.todayHigh <= item.prevDayHigh);
+
+  // 5. Min/Max Ranges
+  if (!isNaN(minPctVal)) filtered = filtered.filter(item => item.pctChange >= minPctVal);
+  if (!isNaN(maxPctVal)) filtered = filtered.filter(item => item.pctChange <= maxPctVal);
+  if (!isNaN(minPriceVal)) filtered = filtered.filter(item => (item.todayClose || item.todayOpen) >= minPriceVal);
+  if (!isNaN(maxPriceVal)) filtered = filtered.filter(item => (item.todayClose || item.todayOpen) <= maxPriceVal);
+
+  // Update KPI sub label
+  const showingEl = document.getElementById('verifyKpiShowingCount');
+  if (showingEl) showingEl.textContent = `Showing ${filtered.length} of ${verifyDataset.length} rows`;
+
+  // 6. Sort Table
+  filtered.sort((a, b) => {
+    let valA = a[verifySortColumn];
+    let valB = b[verifySortColumn];
+
+    if (typeof valA === 'string') {
+      return verifySortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    }
+    valA = Number(valA) || 0;
+    valB = Number(valB) || 0;
+    return verifySortDirection === 'asc' ? valA - valB : valB - valA;
+  });
+
+  // Update Header Sort Icons
+  const columns = ['index', 'name', 'segment', 'date', 'prevDayHigh', 'prevDayClose', 'todayOpen', 'todayHigh', 'todayLow', 'todayClose', 'pctChange', 'pdhPctDiff', 'dayRangePct', 'atmStrike', 'straddlePrice', 'prevDayHighStraddle', 'isBreakout'];
+  columns.forEach(col => {
+    const icon = document.getElementById(`vsort_${col}`);
+    const th = icon?.closest('th');
+    if (icon && th) {
+      if (col === verifySortColumn) {
+        icon.textContent = verifySortDirection === 'asc' ? '▲' : '▼';
+        th.classList.add('sorted');
+      } else {
+        icon.textContent = '⇅';
+        th.classList.remove('sorted');
+      }
+    }
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="18" style="text-align: center; color: var(--bb-text-muted); padding: 3rem;">
+          No instruments match active search and filter constraints.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((item, i) => {
+    const isBreakout = item.todayHigh > item.prevDayHigh;
+    const isStraddleBreakout = item.straddlePrice > item.prevDayHighStraddle;
+    const pctClass = item.pctChange > 0 ? 'pill-pct up' : (item.pctChange < 0 ? 'pill-pct down' : 'pill-pct neutral');
+    const pdhDiffClass = item.pdhPctDiff > 0 ? 'pill-pct up' : (item.pdhPctDiff >= -1.0 ? 'pill-pct' : 'pill-pct down');
+
+    const breakoutBadge = isBreakout
+      ? `<span class="badge-breakout" style="background:rgba(0,230,118,0.2); border:1px solid var(--bb-green); color:var(--bb-green);">🚀 PDH BREAKOUT</span>`
+      : `<span class="badge-normal">NORMAL</span>`;
+
+    const isIdx = item.segment === 'IDX_I' || ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'].includes(item.name);
+    const isMcx = item.segment === 'MCX_COMM' || ['CRUDEOIL', 'NATURALGAS', 'GOLD', 'SILVER', 'COPPER'].includes(item.name);
+    const segBadge = isIdx ? '<span class="tag-chip tag-idx">IDX</span>' : (isMcx ? '<span class="tag-chip tag-mcx">MCX</span>' : '<span style="color:var(--bb-text-muted); font-size:0.75rem;">EQ</span>');
+
+    return `
+      <tr>
+        <td class="text-center mono" style="color: var(--bb-text-muted); font-size: 0.75rem;">#${item.index || (i + 1)}</td>
+        <td class="text-left" style="font-weight: 800; font-size: 0.88rem;">
+          <div style="display: flex; align-items: center; gap: 0.4rem;">
+            <span style="color: var(--bb-amber);">${item.name}</span>
+            ${segBadge}
+          </div>
+        </td>
+        <td class="text-center mono" style="font-size: 0.75rem; color: var(--bb-text-muted);">${item.segment}</td>
+        <td class="text-center mono" style="color: var(--bb-cyan); font-size: 0.78rem;">${item.date}</td>
+        <td class="mono" style="font-weight: 700;">${formatVerifyCurrency(item.prevDayHigh)}</td>
+        <td class="mono" style="color: var(--bb-text-muted);">${formatVerifyCurrency(item.prevDayClose)}</td>
+        <td class="mono">${formatVerifyCurrency(item.todayOpen)}</td>
+        <td class="mono" style="color: ${isBreakout ? 'var(--bb-green)' : 'inherit'}; font-weight: 700;">
+          ${formatVerifyCurrency(item.todayHigh)}
+        </td>
+        <td class="mono">${formatVerifyCurrency(item.todayLow)}</td>
+        <td class="mono" style="font-weight: 800; color: var(--bb-cyan);">${formatVerifyCurrency(item.todayClose)}</td>
+        <td><span class="${pctClass}">${formatVerifyPct(item.pctChange)}</span></td>
+        <td><span class="${pdhDiffClass}">${formatVerifyPct(item.pdhPctDiff)}</span></td>
+        <td class="mono" style="color: var(--bb-text-main); font-size: 0.78rem;">${item.dayRangePct}%</td>
+        <td class="text-center mono" style="font-weight: 700;">${item.atmStrike || '--'}</td>
+        <td class="mono" style="color: var(--bb-green); font-weight: 800;">${formatVerifyCurrency(item.straddlePrice)}</td>
+        <td class="mono" style="color: var(--bb-text-muted);">${formatVerifyCurrency(item.prevDayHighStraddle)}</td>
+        <td class="text-center">${breakoutBadge}</td>
+        <td class="text-center">
+          <button class="btn btn-secondary" onclick="openPreviewModal('${item.name}')" style="font-size: 0.7rem; padding: 0.2rem 0.5rem; color: var(--bb-cyan); border-color: var(--bb-cyan);" title="Inspect Intraday Straddle Graph">
+            👁️ Chart
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function onVerifyDateChanged(val) {
+  if (val) {
+    document.querySelectorAll('.verify-toolbar .quick-date-btn').forEach(b => b.classList.remove('active'));
+    loadVerificationData(val);
+  }
+}
+
+function setVerifyQuickDate(type) {
+  document.querySelectorAll('.verify-toolbar .quick-date-btn').forEach(b => b.classList.remove('active'));
+  const btnMap = { latest: 'btnVerifyLatest', prev: 'btnVerifyPrevDay', '3days': 'btnVerify3Days', '1week': 'btnVerify1Week' };
+  if (btnMap[type]) document.getElementById(btnMap[type])?.classList.add('active');
+
+  const now = new Date();
+  if (type === 'latest') {
+    loadVerificationData('');
+  } else if (type === 'prev') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 1);
+    const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    loadVerificationData(dateStr);
+  } else if (type === '3days') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 3);
+    const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    loadVerificationData(dateStr);
+  } else if (type === '1week') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 7);
+    const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    loadVerificationData(dateStr);
+  }
+}
+
+function exportVerifyCsv() {
+  if (!verifyDataset || verifyDataset.length === 0) {
+    showToast('No data available to export.', 'warning');
+    return;
+  }
+
+  const headers = [
+    '#', 'Symbol', 'Segment', 'Date', 'Prev Date',
+    'Prev Day High (₹)', 'Prev Day Low (₹)', 'Prev Day Close (₹)',
+    'Today Open (₹)', 'Today High (₹)', 'Today Low (₹)', 'Today Close (₹)',
+    'Net Change (₹)', 'Net Change (%)', 'High vs PDH (%)', 'Day Range (%)',
+    'ATM Strike', 'Straddle LTP (₹)', 'Straddle PDH (₹)',
+    'PDH Breakout?', 'Straddle Breakout?', 'Live Feed?'
+  ];
+
+  const rows = [headers.join(',')];
+
+  verifyDataset.forEach((row, i) => {
+    const values = [
+      i + 1,
+      `"${row.name}"`,
+      `"${row.segment}"`,
+      `"${row.date}"`,
+      `"${row.prevDate || 'PREV_SESSION'}"`,
+      row.prevDayHigh,
+      row.prevDayLow,
+      row.prevDayClose,
+      row.todayOpen,
+      row.todayHigh,
+      row.todayLow,
+      row.todayClose,
+      row.netChange,
+      `${row.pctChange}%`,
+      `${row.pdhPctDiff}%`,
+      `${row.dayRangePct}%`,
+      row.atmStrike,
+      row.straddlePrice,
+      row.prevDayHighStraddle,
+      row.todayHigh > row.prevDayHigh ? 'YES' : 'NO',
+      row.straddlePrice > row.prevDayHighStraddle ? 'YES' : 'NO',
+      row.isLive ? 'LIVE' : 'EOD'
+    ];
+    rows.push(values.join(','));
+  });
+
+  const csvString = rows.join('\r\n');
+  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `Dhan_Straddle_Verification_${currentVerifyDate || 'Export'}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast(`Exported ${verifyDataset.length} instruments to CSV`, 'success');
+}
+
+async function sendVerifyCsvToTelegram() {
+  showToast('⏳ Generating and dispatching CSV to Telegram accounts...', 'warning');
+
+  try {
+    const res = await fetch('/api/send-verify-telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: currentVerifyDate })
+    });
+    const data = await res.json();
+
+    if (data.status === 'success') {
+      showToast(`📲 CSV file (${data.rowCount || 217} instruments) delivered to Telegram!`, 'success');
+      // Refresh messages list in background
+      fetchStatus();
+    } else {
+      showToast(`⚠️ ${data.message || 'Telegram delivery failed'}`, 'error');
+    }
+  } catch (err) {
+    showToast(`❌ Failed to send CSV: ${err.message}`, 'error');
+  }
+}
+
 
 

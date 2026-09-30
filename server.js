@@ -12,6 +12,9 @@ let config = {
   dhanAccessToken: "",
   telegramBotToken: "",
   telegramChatId: "",
+  telegramAccount2Enabled: false,
+  telegramBotToken2: "",
+  telegramChatId2: "",
   barMinutes: 15,
   pollIntervalSeconds: 15,
   telegramAlertsEnabled: true,
@@ -160,7 +163,55 @@ function addLog(msg) {
   console.log(entry);
 }
 
-// Telegram Alert Sender with WhatsApp Double-Ticks & Delivery Tracking
+// ==========================================
+// 📨 DUAL TELEGRAM DISPATCH ENGINE (ACCOUNT 1 & ACCOUNT 2)
+// ==========================================
+
+async function postTelegramMessage(botToken, chatId, message) {
+  if (!botToken || !chatId) return { ok: false, error: 'Missing token or chatId' };
+  const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+  try {
+    const res = await safeFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'HTML'
+      })
+    }, 8000);
+    const data = await res.json();
+    return { ok: res.ok && data.ok, status: res.status, data, messageId: data.result?.message_id, error: data?.description };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+async function postTelegramDocument(botToken, chatId, fileContent, fileName, caption = '') {
+  if (!botToken || !chatId) return { ok: false, error: 'Missing token or chatId' };
+  const url = `https://api.telegram.org/bot${botToken}/sendDocument`;
+  try {
+    const form = new FormData();
+    form.append('chat_id', chatId);
+    const blob = new Blob([fileContent], { type: 'text/csv;charset=utf-8;' });
+    form.append('document', blob, fileName);
+    if (caption) {
+      form.append('caption', caption);
+      form.append('parse_mode', 'HTML');
+    }
+
+    const res = await safeFetch(url, {
+      method: 'POST',
+      body: form
+    }, 15000);
+    const data = await res.json();
+    return { ok: res.ok && data.ok, status: res.status, data, messageId: data.result?.message_id, error: data?.description };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+// Telegram Alert Sender with Dual Accounts Support & WhatsApp Double-Ticks
 async function sendTelegramAlert(message, meta = {}) {
   const timestamp = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
   const dateStr = getTodayIST();
@@ -179,6 +230,9 @@ async function sendTelegramAlert(message, meta = {}) {
   const spot = fmtCurrency(meta.spot);
   const pctMove = meta.pctMove != null ? String(meta.pctMove).replace('%', '') + '%' : '0.00%';
 
+  const isAcc1Configured = Boolean(config.telegramBotToken && config.telegramChatId);
+  const isAcc2Configured = Boolean(config.telegramAccount2Enabled && config.telegramChatId2 && (config.telegramBotToken2 || config.telegramBotToken));
+
   const entry = {
     id: msgId,
     timestamp: timestamp,
@@ -192,54 +246,198 @@ async function sendTelegramAlert(message, meta = {}) {
     pctMove: pctMove,
     spot: spot,
     status: meta.type || meta.status || 'PDH BREAKOUT',
-    deliveryState: 'sending', // 'sending' | 'delivered' | 'failed'
-    ticks: '✓', // WhatsApp Single Tick (Sent)
+    deliveryState: 'sending',
+    ticks: '✓',
     text: message,
     chatId: config.telegramChatId || '--',
+    account1: {
+      chatId: config.telegramChatId || '--',
+      status: isAcc1Configured ? 'pending' : 'not_configured',
+      ticks: isAcc1Configured ? '⏳' : '--',
+      deliveredAt: null,
+      error: null
+    },
+    account2: isAcc2Configured ? {
+      chatId: config.telegramChatId2,
+      status: 'pending',
+      ticks: '⏳',
+      deliveredAt: null,
+      error: null
+    } : null,
     deliveredAt: null,
-    error: null,
-    telegramMessageId: null
+    error: null
   };
 
   state.telegramMessages.unshift(entry);
   if (state.telegramMessages.length > 500) state.telegramMessages.pop();
 
-  if (!config.telegramAlertsEnabled || !config.telegramBotToken || !config.telegramChatId) {
+  if (!config.telegramAlertsEnabled || (!isAcc1Configured && !isAcc2Configured)) {
     entry.deliveryState = 'failed';
     entry.ticks = '❌';
-    entry.error = 'Telegram alerts disabled or missing credentials';
+    entry.error = 'Telegram alerts disabled or no accounts configured';
     return { ok: false, message: entry.error, entry };
   }
 
-  const url = `https://api.telegram.org/bot${config.telegramBotToken}/sendMessage`;
-  try {
-    const res = await safeFetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: config.telegramChatId,
-        text: message,
-        parse_mode: 'HTML'
-      })
-    }, 6000);
-    const data = await res.json();
-    if (res.ok && data.ok) {
-      entry.deliveryState = 'delivered';
-      entry.ticks = '✓✓'; // WhatsApp Double Tick (Delivered)
-      entry.deliveredAt = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
-      entry.telegramMessageId = data.result?.message_id;
-      return { ok: true, data, entry };
-    } else {
-      entry.deliveryState = 'failed';
-      entry.ticks = '❌';
-      entry.error = data?.description || `HTTP ${res.status}`;
-      return { ok: false, error: entry.error, data, entry };
-    }
-  } catch (err) {
+  const promises = [];
+  if (isAcc1Configured) {
+    promises.push(
+      postTelegramMessage(config.telegramBotToken, config.telegramChatId, message)
+        .then(res => {
+          if (res.ok) {
+            entry.account1.status = 'delivered';
+            entry.account1.ticks = '✓✓';
+            entry.account1.deliveredAt = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+          } else {
+            entry.account1.status = 'failed';
+            entry.account1.ticks = '❌';
+            entry.account1.error = res.error;
+          }
+          return res;
+        })
+    );
+  }
+
+  if (isAcc2Configured) {
+    const token2 = config.telegramBotToken2 || config.telegramBotToken;
+    promises.push(
+      postTelegramMessage(token2, config.telegramChatId2, message)
+        .then(res => {
+          if (res.ok) {
+            entry.account2.status = 'delivered';
+            entry.account2.ticks = '✓✓';
+            entry.account2.deliveredAt = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+          } else {
+            entry.account2.status = 'failed';
+            entry.account2.ticks = '❌';
+            entry.account2.error = res.error;
+          }
+          return res;
+        })
+    );
+  }
+
+  await Promise.allSettled(promises);
+
+  const anyDelivered = (entry.account1?.status === 'delivered') || (entry.account2?.status === 'delivered');
+  if (anyDelivered) {
+    entry.deliveryState = 'delivered';
+    entry.ticks = '✓✓';
+    entry.deliveredAt = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+    return { ok: true, entry };
+  } else {
     entry.deliveryState = 'failed';
     entry.ticks = '❌';
-    entry.error = err.message;
-    return { ok: false, error: err.message, entry };
+    entry.error = entry.account1?.error || entry.account2?.error || 'Failed to deliver';
+    return { ok: false, error: entry.error, entry };
+  }
+}
+
+// Telegram Document Sender for CSV Data Exports (Dispatches to Both Accounts)
+async function sendTelegramDocument(csvContent, filename, caption = '', meta = {}) {
+  const timestamp = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+  const dateStr = getTodayIST();
+  const msgId = `doc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  const isAcc1Configured = Boolean(config.telegramBotToken && config.telegramChatId);
+  const isAcc2Configured = Boolean(config.telegramAccount2Enabled && config.telegramChatId2 && (config.telegramBotToken2 || config.telegramBotToken));
+
+  const entry = {
+    id: msgId,
+    timestamp: timestamp,
+    rawTimestamp: Date.now(),
+    date: dateStr,
+    symbol: '217 F&O & MCX',
+    atmStrike: 'FULL DATASET',
+    straddlePrice: filename,
+    prevDayHighStraddle: 'CSV FILE',
+    crossNum: 1,
+    pctMove: `${meta.rowCount || 217} Rows`,
+    spot: 'CSV EXPORT',
+    status: 'CSV EXPORT',
+    deliveryState: 'sending',
+    ticks: '✓',
+    text: `📁 <b>Document Attached:</b> <code>${filename}</code>\n${caption}`,
+    chatId: config.telegramChatId || '--',
+    account1: {
+      chatId: config.telegramChatId || '--',
+      status: isAcc1Configured ? 'pending' : 'not_configured',
+      ticks: isAcc1Configured ? '⏳' : '--',
+      deliveredAt: null,
+      error: null
+    },
+    account2: isAcc2Configured ? {
+      chatId: config.telegramChatId2,
+      status: 'pending',
+      ticks: '⏳',
+      deliveredAt: null,
+      error: null
+    } : null,
+    deliveredAt: null,
+    error: null
+  };
+
+  state.telegramMessages.unshift(entry);
+  if (state.telegramMessages.length > 500) state.telegramMessages.pop();
+
+  if (!isAcc1Configured && !isAcc2Configured) {
+    entry.deliveryState = 'failed';
+    entry.ticks = '❌';
+    entry.error = 'No Telegram accounts configured in Settings';
+    return { ok: false, message: entry.error, entry };
+  }
+
+  const promises = [];
+  if (isAcc1Configured) {
+    promises.push(
+      postTelegramDocument(config.telegramBotToken, config.telegramChatId, csvContent, filename, caption)
+        .then(res => {
+          if (res.ok) {
+            entry.account1.status = 'delivered';
+            entry.account1.ticks = '✓✓';
+            entry.account1.deliveredAt = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+          } else {
+            entry.account1.status = 'failed';
+            entry.account1.ticks = '❌';
+            entry.account1.error = res.error;
+          }
+          return res;
+        })
+    );
+  }
+
+  if (isAcc2Configured) {
+    const token2 = config.telegramBotToken2 || config.telegramBotToken;
+    promises.push(
+      postTelegramDocument(token2, config.telegramChatId2, csvContent, filename, caption)
+        .then(res => {
+          if (res.ok) {
+            entry.account2.status = 'delivered';
+            entry.account2.ticks = '✓✓';
+            entry.account2.deliveredAt = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+          } else {
+            entry.account2.status = 'failed';
+            entry.account2.ticks = '❌';
+            entry.account2.error = res.error;
+          }
+          return res;
+        })
+    );
+  }
+
+  await Promise.allSettled(promises);
+
+  const anyDelivered = (entry.account1?.status === 'delivered') || (entry.account2?.status === 'delivered');
+  if (anyDelivered) {
+    entry.deliveryState = 'delivered';
+    entry.ticks = '✓✓';
+    entry.deliveredAt = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+    addLog(`📤 [TELEGRAM CSV] Successfully delivered ${filename} (${meta.rowCount || 217} rows) to Telegram!`);
+    return { ok: true, entry };
+  } else {
+    entry.deliveryState = 'failed';
+    entry.ticks = '❌';
+    entry.error = entry.account1?.error || entry.account2?.error || 'Failed to deliver document';
+    return { ok: false, error: entry.error, entry };
   }
 }
 
@@ -1613,6 +1811,135 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Common verification dataset generator
+  async function generateVerificationDataset(targetDate = '') {
+    const todayIST = getTodayIST();
+    const queryDate = targetDate || todayIST;
+
+    // 1. Fetch authentic batch marketfeed quotes for all 217 symbols in 1 shot
+    const batchFeeds = await fetchBatchMarketfeedOhlc();
+    const eqFeeds = batchFeeds?.NSE_EQ || {};
+    const idxFeeds = batchFeeds?.IDX_I || {};
+    const mcxFeeds = batchFeeds?.MCX_COMM || {};
+
+    const results = [];
+    const queue = [...config.watchlist];
+    const batchSize = 10;
+
+    for (let i = 0; i < queue.length; i += batchSize) {
+      const chunk = queue.slice(i, i + batchSize);
+      const chunkResults = await Promise.all(chunk.map(async (sym) => {
+        let feed = null;
+        if (sym.segment === 'NSE_EQ') feed = eqFeeds[String(sym.securityId)];
+        else if (sym.segment === 'IDX_I') feed = idxFeeds[String(sym.securityId)];
+        else if (sym.segment === 'MCX_COMM') feed = mcxFeeds[String(sym.securityId)];
+
+        const ohlcData = await fetchDailyOhlc(sym.securityId, sym.segment, '2026-06-01', queryDate);
+        const parsed = extractOhlcForDate(ohlcData, targetDate);
+
+        if (parsed) {
+          const spot = (feed && feed.last_price && (!targetDate || targetDate === parsed.date)) ? feed.last_price : parsed.close;
+          const atmStrike = getDynamicAtmStrike(spot, sym.name);
+          const liveSym = state.symbols[sym.name];
+          
+          // Straddle ratio by segment
+          const isIndex = sym.segment === 'IDX_I';
+          const isMcx = sym.segment === 'MCX_COMM';
+          let straddleRatio = 0.025;
+          if (isIndex) straddleRatio = sym.name === 'NIFTY' ? 0.012 : (sym.name === 'BANKNIFTY' ? 0.020 : 0.015);
+          else if (isMcx) straddleRatio = sym.name === 'CRUDEOIL' ? 0.045 : (sym.name === 'NATURALGAS' ? 0.075 : 0.015);
+
+          const straddlePrice = (liveSym && liveSym.isLive && liveSym.straddlePrice) 
+            ? liveSym.straddlePrice 
+            : parseFloat((spot * straddleRatio).toFixed(2));
+          const prevDayHighStraddle = (liveSym && liveSym.prevDayHighStraddle)
+            ? liveSym.prevDayHighStraddle
+            : parseFloat((straddlePrice * 1.035).toFixed(2));
+
+          const prevClose = parsed.prevClose || parsed.open;
+          const netChange = parseFloat((spot - prevClose).toFixed(2));
+          const pctChange = parseFloat((((spot - prevClose) / (prevClose || 1)) * 100).toFixed(2));
+
+          return {
+            name: sym.name,
+            securityId: sym.securityId,
+            segment: sym.segment,
+            date: parsed.date,
+            prevDate: parsed.prevDate,
+            prevDayHigh: parsed.prevHigh,
+            prevDayLow: parsed.prevLow,
+            prevDayClose: prevClose,
+            todayOpen: parsed.open,
+            todayHigh: (feed && feed.ohlc && feed.ohlc.high > parsed.high && (!targetDate || targetDate === parsed.date)) ? feed.ohlc.high : parsed.high,
+            todayLow: (feed && feed.ohlc && feed.ohlc.low < parsed.low && feed.ohlc.low > 0 && (!targetDate || targetDate === parsed.date)) ? feed.ohlc.low : parsed.low,
+            todayClose: spot,
+            netChange: netChange,
+            pctChange: pctChange,
+            atmStrike: atmStrike,
+            straddlePrice: straddlePrice,
+            prevDayHighStraddle: prevDayHighStraddle,
+            isBreakout: parsed.high > parsed.prevHigh,
+            straddleBreakout: straddlePrice > prevDayHighStraddle,
+            isLive: Boolean(liveSym?.isLive)
+          };
+        } else if (feed && feed.ohlc) {
+          // Authentic fallback from Dhan batch live marketfeed
+          const spot = feed.last_price || feed.ohlc.close;
+          const prevClose = feed.ohlc.close;
+          const todayOpen = feed.ohlc.open || spot;
+          const todayHigh = feed.ohlc.high || spot;
+          const todayLow = feed.ohlc.low || spot;
+          const prevHigh = todayHigh > prevClose ? parseFloat((prevClose * 1.01).toFixed(2)) : todayHigh;
+          const netChange = parseFloat((spot - prevClose).toFixed(2));
+          const pctChange = parseFloat((((spot - prevClose) / (prevClose || 1)) * 100).toFixed(2));
+          const atmStrike = getDynamicAtmStrike(spot, sym.name);
+          const liveSym = state.symbols[sym.name];
+
+          const isIndex = sym.segment === 'IDX_I';
+          const isMcx = sym.segment === 'MCX_COMM';
+          let straddleRatio = 0.025;
+          if (isIndex) straddleRatio = sym.name === 'NIFTY' ? 0.012 : (sym.name === 'BANKNIFTY' ? 0.020 : 0.015);
+          else if (isMcx) straddleRatio = sym.name === 'CRUDEOIL' ? 0.045 : (sym.name === 'NATURALGAS' ? 0.075 : 0.015);
+
+          const straddlePrice = (liveSym && liveSym.isLive && liveSym.straddlePrice) 
+            ? liveSym.straddlePrice 
+            : parseFloat((spot * straddleRatio).toFixed(2));
+          const prevDayHighStraddle = (liveSym && liveSym.prevDayHighStraddle)
+            ? liveSym.prevDayHighStraddle
+            : parseFloat((straddlePrice * 1.035).toFixed(2));
+
+          return {
+            name: sym.name,
+            securityId: sym.securityId,
+            segment: sym.segment,
+            date: queryDate,
+            prevDate: 'PREV_SESSION',
+            prevDayHigh: prevHigh,
+            prevDayLow: todayLow,
+            prevDayClose: prevClose,
+            todayOpen: todayOpen,
+            todayHigh: todayHigh,
+            todayLow: todayLow,
+            todayClose: spot,
+            netChange: netChange,
+            pctChange: pctChange,
+            atmStrike: atmStrike,
+            straddlePrice: straddlePrice,
+            prevDayHighStraddle: prevDayHighStraddle,
+            isBreakout: todayHigh > prevHigh,
+            straddleBreakout: straddlePrice > prevDayHighStraddle,
+            isLive: Boolean(liveSym?.isLive)
+          };
+        } else {
+          return null;
+        }
+      }));
+      results.push(...chunkResults.filter(Boolean));
+      await sleep(35);
+    }
+    return results;
+  }
+
   if (pathname === '/api/verify-data') {
     try {
       let targetDate = parsedUrl.searchParams.get('date') || '';
@@ -1621,130 +1948,8 @@ const server = http.createServer(async (req, res) => {
         if (body.date) targetDate = body.date;
       }
       
-      const todayIST = getTodayIST();
-      const queryDate = targetDate || todayIST;
-
-      // 1. Fetch authentic batch marketfeed quotes for all 217 symbols in 1 shot
-      const batchFeeds = await fetchBatchMarketfeedOhlc();
-      const eqFeeds = batchFeeds?.NSE_EQ || {};
-      const idxFeeds = batchFeeds?.IDX_I || {};
-      const mcxFeeds = batchFeeds?.MCX_COMM || {};
-
-      const results = [];
-      const queue = [...config.watchlist];
-      const batchSize = 10;
-
-      for (let i = 0; i < queue.length; i += batchSize) {
-        const chunk = queue.slice(i, i + batchSize);
-        const chunkResults = await Promise.all(chunk.map(async (sym) => {
-          let feed = null;
-          if (sym.segment === 'NSE_EQ') feed = eqFeeds[String(sym.securityId)];
-          else if (sym.segment === 'IDX_I') feed = idxFeeds[String(sym.securityId)];
-          else if (sym.segment === 'MCX_COMM') feed = mcxFeeds[String(sym.securityId)];
-
-          const ohlcData = await fetchDailyOhlc(sym.securityId, sym.segment, '2026-06-01', queryDate);
-          const parsed = extractOhlcForDate(ohlcData, targetDate);
-
-          if (parsed) {
-            const spot = (feed && feed.last_price && (!targetDate || targetDate === parsed.date)) ? feed.last_price : parsed.close;
-            const atmStrike = getDynamicAtmStrike(spot, sym.name);
-            const liveSym = state.symbols[sym.name];
-            
-            // Straddle ratio by segment
-            const isIndex = sym.segment === 'IDX_I';
-            const isMcx = sym.segment === 'MCX_COMM';
-            let straddleRatio = 0.025;
-            if (isIndex) straddleRatio = sym.name === 'NIFTY' ? 0.012 : (sym.name === 'BANKNIFTY' ? 0.020 : 0.015);
-            else if (isMcx) straddleRatio = sym.name === 'CRUDEOIL' ? 0.045 : (sym.name === 'NATURALGAS' ? 0.075 : 0.015);
-
-            const straddlePrice = (liveSym && liveSym.isLive && liveSym.straddlePrice) 
-              ? liveSym.straddlePrice 
-              : parseFloat((spot * straddleRatio).toFixed(2));
-            const prevDayHighStraddle = (liveSym && liveSym.prevDayHighStraddle)
-              ? liveSym.prevDayHighStraddle
-              : parseFloat((straddlePrice * 1.035).toFixed(2));
-
-            const prevClose = parsed.prevClose || parsed.open;
-            const netChange = parseFloat((spot - prevClose).toFixed(2));
-            const pctChange = parseFloat((((spot - prevClose) / (prevClose || 1)) * 100).toFixed(2));
-
-            return {
-              name: sym.name,
-              securityId: sym.securityId,
-              segment: sym.segment,
-              date: parsed.date,
-              prevDate: parsed.prevDate,
-              prevDayHigh: parsed.prevHigh,
-              prevDayLow: parsed.prevLow,
-              prevDayClose: prevClose,
-              todayOpen: parsed.open,
-              todayHigh: (feed && feed.ohlc && feed.ohlc.high > parsed.high && (!targetDate || targetDate === parsed.date)) ? feed.ohlc.high : parsed.high,
-              todayLow: (feed && feed.ohlc && feed.ohlc.low < parsed.low && feed.ohlc.low > 0 && (!targetDate || targetDate === parsed.date)) ? feed.ohlc.low : parsed.low,
-              todayClose: spot,
-              netChange: netChange,
-              pctChange: pctChange,
-              atmStrike: atmStrike,
-              straddlePrice: straddlePrice,
-              prevDayHighStraddle: prevDayHighStraddle,
-              isBreakout: parsed.high > parsed.prevHigh,
-              straddleBreakout: straddlePrice > prevDayHighStraddle,
-              isLive: Boolean(liveSym?.isLive)
-            };
-          } else if (feed && feed.ohlc) {
-            // Authentic fallback from Dhan batch live marketfeed
-            const spot = feed.last_price || feed.ohlc.close;
-            const prevClose = feed.ohlc.close;
-            const todayOpen = feed.ohlc.open || spot;
-            const todayHigh = feed.ohlc.high || spot;
-            const todayLow = feed.ohlc.low || spot;
-            const prevHigh = todayHigh > prevClose ? parseFloat((prevClose * 1.01).toFixed(2)) : todayHigh;
-            const netChange = parseFloat((spot - prevClose).toFixed(2));
-            const pctChange = parseFloat((((spot - prevClose) / (prevClose || 1)) * 100).toFixed(2));
-            const atmStrike = getDynamicAtmStrike(spot, sym.name);
-            const liveSym = state.symbols[sym.name];
-
-            const isIndex = sym.segment === 'IDX_I';
-            const isMcx = sym.segment === 'MCX_COMM';
-            let straddleRatio = 0.025;
-            if (isIndex) straddleRatio = sym.name === 'NIFTY' ? 0.012 : (sym.name === 'BANKNIFTY' ? 0.020 : 0.015);
-            else if (isMcx) straddleRatio = sym.name === 'CRUDEOIL' ? 0.045 : (sym.name === 'NATURALGAS' ? 0.075 : 0.015);
-
-            const straddlePrice = (liveSym && liveSym.isLive && liveSym.straddlePrice) 
-              ? liveSym.straddlePrice 
-              : parseFloat((spot * straddleRatio).toFixed(2));
-            const prevDayHighStraddle = (liveSym && liveSym.prevDayHighStraddle)
-              ? liveSym.prevDayHighStraddle
-              : parseFloat((straddlePrice * 1.035).toFixed(2));
-
-            return {
-              name: sym.name,
-              securityId: sym.securityId,
-              segment: sym.segment,
-              date: queryDate,
-              prevDate: 'PREV_SESSION',
-              prevDayHigh: prevHigh,
-              prevDayLow: todayLow,
-              prevDayClose: prevClose,
-              todayOpen: todayOpen,
-              todayHigh: todayHigh,
-              todayLow: todayLow,
-              todayClose: spot,
-              netChange: netChange,
-              pctChange: pctChange,
-              atmStrike: atmStrike,
-              straddlePrice: straddlePrice,
-              prevDayHighStraddle: prevDayHighStraddle,
-              isBreakout: todayHigh > prevHigh,
-              straddleBreakout: straddlePrice > prevDayHighStraddle,
-              isLive: Boolean(liveSym?.isLive)
-            };
-          } else {
-            return null;
-          }
-        }));
-        results.push(...chunkResults.filter(Boolean));
-        await sleep(35);
-      }
+      const queryDate = targetDate || getTodayIST();
+      const results = await generateVerificationDataset(targetDate);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -1752,6 +1957,117 @@ const server = http.createServer(async (req, res) => {
         targetDate: queryDate,
         count: results.length,
         data: results
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'error', message: err.message }));
+    }
+    return;
+  }
+
+  if (pathname === '/api/send-verify-telegram') {
+    try {
+      let targetDate = parsedUrl.searchParams.get('date') || '';
+      if (req.method === 'POST') {
+        const body = await readJsonBody(req).catch(() => ({}));
+        if (body.date) targetDate = body.date;
+      }
+
+      const queryDate = targetDate || getTodayIST();
+      addLog(`📤 [TELEGRAM CSV] Generating Data Verifier CSV snapshot for ${queryDate}...`);
+      const results = await generateVerificationDataset(targetDate);
+
+      if (!results || results.length === 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error', message: 'No data records available to generate CSV.' }));
+        return;
+      }
+
+      // Generate Clean CSV Content
+      const headers = [
+        '#',
+        'Symbol',
+        'Segment',
+        'Date',
+        'Prev Date',
+        'Prev Day High (₹)',
+        'Prev Day Low (₹)',
+        'Prev Day Close (₹)',
+        'Today Open (₹)',
+        'Today High (₹)',
+        'Today Low (₹)',
+        'Today Close / LTP (₹)',
+        'Net Change (₹)',
+        'Net Change (%)',
+        'High vs PDH (%)',
+        'Day Range (%)',
+        'ATM Strike',
+        'Straddle LTP (₹)',
+        'Straddle PDH (₹)',
+        'PDH Breakout?',
+        'Straddle Breakout?',
+        'Live Feed?'
+      ];
+
+      const csvRows = [headers.join(',')];
+
+      let breakoutCount = 0;
+      results.forEach((row, i) => {
+        const pdh = row.prevDayHigh || 1;
+        const pdhPctDiff = (((row.todayHigh - pdh) / pdh) * 100).toFixed(2);
+        const dayRangePct = (row.todayLow && row.todayLow > 0) ? (((row.todayHigh - row.todayLow) / row.todayLow) * 100).toFixed(2) : '0.00';
+        if (row.todayHigh > row.prevDayHigh) breakoutCount++;
+
+        const values = [
+          i + 1,
+          `"${row.name}"`,
+          `"${row.segment}"`,
+          `"${row.date}"`,
+          `"${row.prevDate}"`,
+          row.prevDayHigh,
+          row.prevDayLow,
+          row.prevDayClose,
+          row.todayOpen,
+          row.todayHigh,
+          row.todayLow,
+          row.todayClose,
+          row.netChange,
+          `${row.pctChange}%`,
+          `${pdhPctDiff}%`,
+          `${dayRangePct}%`,
+          row.atmStrike,
+          row.straddlePrice,
+          row.prevDayHighStraddle,
+          row.todayHigh > row.prevDayHigh ? 'YES' : 'NO',
+          row.straddlePrice > row.prevDayHighStraddle ? 'YES' : 'NO',
+          row.isLive ? 'LIVE' : 'EOD'
+        ];
+        csvRows.push(values.join(','));
+      });
+
+      const csvContent = csvRows.join('\r\n');
+      const filename = `Dhan_Straddle_Verification_${queryDate}.csv`;
+
+      const caption = `╔════════════════════════════════════════╗\n` +
+        `📊 <b>DHAN STRADDLE PRO — DATA VERIFIER EXPORT</b>\n` +
+        `╚════════════════════════════════════════╝\n\n` +
+        `📅 <b>Trading Date:</b> <code>${queryDate}</code>\n` +
+        `🎯 <b>Total Assets Monitored:</b> <b>${results.length}</b> (208 F&O, 4 Indices, 5 MCX)\n` +
+        `🚀 <b>Confirmed PDH Breakouts:</b> <b>${breakoutCount}</b>\n` +
+        `📁 <b>File Attached:</b> <code>${filename}</code>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `<i>Exported from Bloomberg Terminal Unified Intelligence Suite</i>`;
+
+      const docResult = await sendTelegramDocument(csvContent, filename, caption, { rowCount: results.length });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: docResult.ok ? 'success' : 'partial_error',
+        message: docResult.ok ? `CSV file (${results.length} rows) successfully dispatched to Telegram!` : (docResult.error || 'Failed to dispatch to Telegram'),
+        filename,
+        rowCount: results.length,
+        breakouts: breakoutCount,
+        result: docResult
       }));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -1837,6 +2153,15 @@ const server = http.createServer(async (req, res) => {
       if (newCfg.telegramChatId !== undefined && newCfg.telegramChatId.trim() !== '') {
         config.telegramChatId = newCfg.telegramChatId.trim();
       }
+      if (newCfg.telegramAccount2Enabled !== undefined) {
+        config.telegramAccount2Enabled = Boolean(newCfg.telegramAccount2Enabled);
+      }
+      if (newCfg.telegramBotToken2 && !newCfg.telegramBotToken2.startsWith('****') && newCfg.telegramBotToken2.trim() !== '') {
+        config.telegramBotToken2 = newCfg.telegramBotToken2.trim();
+      }
+      if (newCfg.telegramChatId2 !== undefined) {
+        config.telegramChatId2 = newCfg.telegramChatId2.trim();
+      }
       if (newCfg.barMinutes !== undefined && !isNaN(parseInt(newCfg.barMinutes, 10))) {
         config.barMinutes = parseInt(newCfg.barMinutes, 10);
       }
@@ -1863,7 +2188,7 @@ const server = http.createServer(async (req, res) => {
         addLog('🔑 Dhan token updated. Expiry cache and charts reset to live feed.');
       }
       saveConfig();
-      addLog(`⚙️ Configuration updated. Telegram alerts: ${config.telegramAlertsEnabled ? 'ENABLED' : 'OFF'}`);
+      addLog(`⚙️ Configuration updated. Dual Telegram Accounts: ${config.telegramAccount2Enabled ? 'ACCOUNT 1 & ACCOUNT 2 ACTIVE' : 'ACCOUNT 1 ONLY'}`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'success', message: 'Settings saved successfully!', config }));
     } catch (err) {
@@ -2091,6 +2416,9 @@ const server = http.createServer(async (req, res) => {
       const dhanAccessToken = (body.dhanAccessToken && !body.dhanAccessToken.startsWith('****') && body.dhanAccessToken.trim()) || config.dhanAccessToken;
       const telegramBotToken = (body.telegramBotToken && !body.telegramBotToken.startsWith('****') && body.telegramBotToken.trim()) || config.telegramBotToken;
       const telegramChatId = (body.telegramChatId && body.telegramChatId.trim()) || config.telegramChatId;
+      const telegramAccount2Enabled = body.telegramAccount2Enabled !== undefined ? Boolean(body.telegramAccount2Enabled) : config.telegramAccount2Enabled;
+      const telegramBotToken2 = (body.telegramBotToken2 && !body.telegramBotToken2.startsWith('****') && body.telegramBotToken2.trim()) || config.telegramBotToken2 || telegramBotToken;
+      const telegramChatId2 = (body.telegramChatId2 && body.telegramChatId2.trim()) || config.telegramChatId2;
       
       let dhanResult = { status: 'failed', message: 'Not tested' };
       if (dhanAccessToken && dhanClientId) {
@@ -2111,18 +2439,34 @@ const server = http.createServer(async (req, res) => {
         const tgRes = await safeFetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: telegramChatId, text: '✅ Bloomberg Terminal Web App: Telegram Connection Test Successful!' })
+          body: JSON.stringify({ chat_id: telegramChatId, text: '✅ [Account 1] Bloomberg Terminal: Telegram Connection Test Successful!' })
         }, 5000);
         if (tgRes.ok) {
-          telegramResult = { status: 'success', message: 'Message delivered to Telegram!' };
+          telegramResult = { status: 'success', message: `Message delivered to Account 1 (${telegramChatId})!` };
         } else {
           const tgErr = await tgRes.text();
-          telegramResult = { status: 'failed', message: `Telegram error: ${tgErr}` };
+          telegramResult = { status: 'failed', message: `Account 1 error: ${tgErr}` };
+        }
+      }
+
+      let telegramResult2 = { status: 'not_configured', message: 'Account 2 not enabled' };
+      if (telegramAccount2Enabled && telegramChatId2 && (telegramBotToken2 || telegramBotToken)) {
+        const token2 = telegramBotToken2 || telegramBotToken;
+        const tgRes2 = await safeFetch(`https://api.telegram.org/bot${token2}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: telegramChatId2, text: '✅ [Account 2] Bloomberg Terminal: Telegram Connection Test Successful!' })
+        }, 5000);
+        if (tgRes2.ok) {
+          telegramResult2 = { status: 'success', message: `Message delivered to Account 2 (${telegramChatId2})!` };
+        } else {
+          const tgErr2 = await tgRes2.text();
+          telegramResult2 = { status: 'failed', message: `Account 2 error: ${tgErr2}` };
         }
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ dhan: dhanResult, telegram: telegramResult }));
+      res.end(JSON.stringify({ dhan: dhanResult, telegram: telegramResult, telegram2: telegramResult2 }));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'error', message: err.message }));

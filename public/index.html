@@ -68,9 +68,9 @@
     <button class="tab-btn" onclick="switchTab('charts')" id="tabBtnCharts">
       <span class="key-code">[ F5 ]</span> 📊 QUANT STRATEGY CHARTS &amp; MULTI-RULE SUITE
     </button>
-    <a href="verify.html" class="tab-btn" style="text-decoration: none;" id="tabBtnVerify">
+    <button class="tab-btn" onclick="switchTab('verify')" id="tabBtnVerify">
       <span class="key-code">[ F6 ]</span> 📋 DATA VERIFIER &amp; HISTORICAL CSV
-    </a>
+    </button>
   </nav>
 
   <!-- Main Workspace -->
@@ -267,108 +267,151 @@
       </div>
 
     <!-- TAB 3: SETTINGS & API KEYS -->
-    <div id="tab-settings" class="tab-content">
-      <div class="grid-2">
-        
-        <!-- API Credentials Panel -->
-        <div class="bb-panel">
-          <div class="panel-header">
-            <div class="panel-title">⚙️ DHAN & TELEGRAM API CREDENTIALS</div>
-          </div>
+      <!-- TAB 3: SETTINGS & API CREDENTIALS -->
+      <div id="tab-settings" class="tab-content">
+        <div class="grid-2">
           
-          <form id="settingsForm">
-            <div class="form-group">
-              <label for="cfgDhanClientId">Dhan Client ID</label>
-              <input type="text" id="cfgDhanClientId" placeholder="e.g. 1100616877" required>
+          <!-- API Credentials Panel -->
+          <div class="bb-panel">
+            <div class="panel-header">
+              <div class="panel-title">⚙️ DHAN &amp; DUAL TELEGRAM API CREDENTIALS</div>
             </div>
-
-            <div class="form-group">
-              <label for="cfgDhanAccessToken">Dhan Access Token (24-hr JWT)</label>
-              <div style="position: relative; display: flex; align-items: center;">
-                <input type="password" id="cfgDhanAccessToken" placeholder="Paste your 24-hr access token" style="width: 100%; padding-right: 2.5rem;" required autocomplete="off">
-                <button type="button" onclick="toggleTokenVisibility('cfgDhanAccessToken', this)" style="position: absolute; right: 0.5rem; background: none; border: none; color: var(--bb-text-muted); cursor: pointer; font-size: 1rem; padding: 0.2rem;" title="Show/Hide Token">👁️</button>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="cfgTelegramBotToken">Telegram Bot Token</label>
-              <div style="position: relative; display: flex; align-items: center;">
-                <input type="password" id="cfgTelegramBotToken" placeholder="e.g. 8867203270:AAHTfS8..." style="width: 100%; padding-right: 2.5rem;" required autocomplete="off">
-                <button type="button" onclick="toggleTokenVisibility('cfgTelegramBotToken', this)" style="position: absolute; right: 0.5rem; background: none; border: none; color: var(--bb-text-muted); cursor: pointer; font-size: 1rem; padding: 0.2rem;" title="Show/Hide Token">👁️</button>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="cfgTelegramChatId">Telegram Chat ID</label>
-              <input type="text" id="cfgTelegramChatId" placeholder="e.g. 723433781" required>
-            </div>
-
-            <div class="grid-2">
+            
+            <form id="settingsForm">
+              <!-- Dhan Credentials -->
               <div class="form-group">
-                <label for="cfgBarMinutes">Candle Timeframe (Minutes)</label>
-                <select id="cfgBarMinutes">
-                  <option value="5">5 Minutes</option>
-                  <option value="15" selected>15 Minutes</option>
-                  <option value="30">30 Minutes</option>
-                </select>
+                <label for="cfgDhanClientId">Dhan Client ID</label>
+                <input type="text" id="cfgDhanClientId" placeholder="e.g. 1100616877" required>
               </div>
 
               <div class="form-group">
-                <label for="cfgPollInterval">Poll Interval (Seconds)</label>
-                <select id="cfgPollInterval">
-                  <option value="5">5 Seconds</option>
-                  <option value="15" selected>15 Seconds</option>
-                  <option value="30">30 Seconds</option>
-                </select>
+                <label for="cfgDhanAccessToken">Dhan Access Token (24-hr JWT)</label>
+                <div style="position: relative; display: flex; align-items: center;">
+                  <input type="password" id="cfgDhanAccessToken" placeholder="Paste your 24-hr access token" style="width: 100%; padding-right: 2.5rem;" required autocomplete="off">
+                  <button type="button" onclick="toggleTokenVisibility('cfgDhanAccessToken', this)" style="position: absolute; right: 0.5rem; background: none; border: none; color: var(--bb-text-muted); cursor: pointer; font-size: 1rem; padding: 0.2rem;" title="Show/Hide Token">👁️</button>
+                </div>
+              </div>
+
+              <!-- Telegram Account 1 (Primary) -->
+              <div class="account-card-box acc1" style="margin-top: 0.75rem;">
+                <div class="account-card-header">
+                  <span style="font-weight: 800; font-size: 0.85rem; color: var(--bb-cyan);">📱 TELEGRAM ACCOUNT 1 (PRIMARY)</span>
+                  <span class="account-tag acc1">PRIMARY DISPATCH</span>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 0.5rem;">
+                  <label for="cfgTelegramBotToken">Bot Token (Account 1)</label>
+                  <div style="position: relative; display: flex; align-items: center;">
+                    <input type="password" id="cfgTelegramBotToken" placeholder="e.g. 8874725340:AAEr3RF..." style="width: 100%; padding-right: 2.5rem;" required autocomplete="off">
+                    <button type="button" onclick="toggleTokenVisibility('cfgTelegramBotToken', this)" style="position: absolute; right: 0.5rem; background: none; border: none; color: var(--bb-text-muted); cursor: pointer; font-size: 1rem; padding: 0.2rem;" title="Show/Hide Token">👁️</button>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="cfgTelegramChatId">Chat ID (Account 1)</label>
+                  <input type="text" id="cfgTelegramChatId" placeholder="e.g. 723433781" required>
+                </div>
+              </div>
+
+              <!-- Telegram Account 2 (Secondary Broadcast) -->
+              <div class="account-card-box acc2" style="margin-top: 1rem;">
+                <div class="account-card-header">
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" id="cfgTelegramAccount2Enabled" style="width: 16px; height: 16px; cursor: pointer;">
+                    <label for="cfgTelegramAccount2Enabled" style="margin: 0; cursor: pointer; font-weight: 800; font-size: 0.85rem; color: var(--bb-amber);">
+                      📱 ENABLE TELEGRAM ACCOUNT 2 (DUAL BROADCAST)
+                    </label>
+                  </div>
+                  <span class="account-tag acc2">BROADCAST 2</span>
+                </div>
+
+                <div id="account2Fields" style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+                  <div class="form-group" style="margin-bottom: 0.5rem;">
+                    <label for="cfgTelegramBotToken2">Bot Token (Optional — Leave blank to share Account 1 bot)</label>
+                    <div style="position: relative; display: flex; align-items: center;">
+                      <input type="password" id="cfgTelegramBotToken2" placeholder="Leave empty to use Bot Token 1, or specify a 2nd bot token" style="width: 100%; padding-right: 2.5rem;" autocomplete="off">
+                      <button type="button" onclick="toggleTokenVisibility('cfgTelegramBotToken2', this)" style="position: absolute; right: 0.5rem; background: none; border: none; color: var(--bb-text-muted); cursor: pointer; font-size: 1rem; padding: 0.2rem;" title="Show/Hide Token">👁️</button>
+                    </div>
+                  </div>
+
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfgTelegramChatId2">Chat ID (Account 2)</label>
+                    <input type="text" id="cfgTelegramChatId2" placeholder="e.g. 987654321 / @your_channel">
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid-2" style="margin-top: 1rem;">
+                <div class="form-group">
+                  <label for="cfgBarMinutes">Candle Timeframe (Minutes)</label>
+                  <select id="cfgBarMinutes">
+                    <option value="5">5 Minutes</option>
+                    <option value="15" selected>15 Minutes</option>
+                    <option value="30">30 Minutes</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="cfgPollInterval">Poll Interval (Seconds)</label>
+                  <select id="cfgPollInterval">
+                    <option value="5">5 Seconds</option>
+                    <option value="15" selected>15 Seconds</option>
+                    <option value="30">30 Seconds</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-top: 1rem; display: flex; align-items: center; gap: 0.75rem; background: var(--bb-panel-border); padding: 0.75rem; border-radius: 4px;">
+                <input type="checkbox" id="cfgTelegramAlertsEnabled" style="width: 18px; height: 18px; cursor: pointer;">
+                <label for="cfgTelegramAlertsEnabled" style="margin: 0; cursor: pointer; color: var(--bb-amber); font-weight: 700;">
+                  🔔 Enable Real-Time Telegram Breakout Alerts (Broadcasts to Both Accounts)
+                </label>
+              </div>
+
+              <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                <button type="submit" class="btn">Save Settings</button>
+                <button type="button" class="btn btn-secondary" onclick="runConnectionTest()">Test Dual Connections</button>
+              </div>
+            </form>
+
+            <div class="alert-toast" id="settingsToast"></div>
+          </div>
+
+          <!-- Connection Diagnostics Panel -->
+          <div class="bb-panel">
+            <div class="panel-header">
+              <div class="panel-title">🔍 CONNECTION DIAGNOSTICS &amp; WATCHLIST</div>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+              <div class="stat-card">
+                <div class="stat-label">Dhan Trading API Status</div>
+                <div class="stat-val" style="font-size: 1.1rem; color: var(--bb-green);" id="diagDhan">Connected</div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-label">Telegram Account 1 (Primary)</div>
+                <div class="stat-val" style="font-size: 1.1rem; color: var(--bb-green);" id="diagTelegram">Connected</div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-label">Telegram Account 2 (Secondary)</div>
+                <div class="stat-val" style="font-size: 1.1rem; color: var(--bb-amber);" id="diagTelegram2">Disabled / Not Configured</div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-label">Active Watchlist Coverage</div>
+                <div class="stat-val" style="font-size: 1.1rem; color: var(--bb-cyan);" id="diagWatchlist">230 F&O Stocks &amp; Indices Loaded</div>
+              </div>
+
+              <div style="font-size: 0.8rem; color: var(--bb-text-muted); line-height: 1.5; margin-top: 1rem;">
+                💡 <b>Tip:</b> Alerts, 5-minute scans, EOD reports, and Data Verifier CSV exports will simultaneously broadcast to both Account 1 and Account 2 when enabled.
               </div>
             </div>
-
-            <div class="form-group" style="margin-top: 1rem; display: flex; align-items: center; gap: 0.75rem; background: var(--bb-panel-border); padding: 0.75rem; border-radius: 4px;">
-              <input type="checkbox" id="cfgTelegramAlertsEnabled" style="width: 18px; height: 18px; cursor: pointer;">
-              <label for="cfgTelegramAlertsEnabled" style="margin: 0; cursor: pointer; color: var(--bb-amber); font-weight: 700;">
-                🔔 Enable Real-Time Telegram Breakout Alerts
-              </label>
-            </div>
-
-            <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-              <button type="submit" class="btn">Save Settings</button>
-              <button type="button" class="btn btn-secondary" onclick="runConnectionTest()">Test Connections</button>
-            </div>
-          </form>
-
-          <div class="alert-toast" id="settingsToast"></div>
-        </div>
-
-        <!-- Connection Diagnostics Panel -->
-        <div class="bb-panel">
-          <div class="panel-header">
-            <div class="panel-title">🔍 CONNECTION DIAGNOSTICS & WATCHLIST</div>
           </div>
-          
-          <div style="display: flex; flex-direction: column; gap: 1rem;">
-            <div class="stat-card">
-              <div class="stat-label">Dhan Trading API Status</div>
-              <div class="stat-val" style="font-size: 1.1rem; color: var(--bb-green);" id="diagDhan">Connected</div>
-            </div>
 
-            <div class="stat-card">
-              <div class="stat-label">Telegram Notification Status</div>
-              <div class="stat-val" style="font-size: 1.1rem; color: var(--bb-green);" id="diagTelegram">Connected</div>
-            </div>
-
-            <div class="stat-card">
-              <div class="stat-label">Active Watchlist Coverage</div>
-              <div class="stat-val" style="font-size: 1.1rem; color: var(--bb-cyan);" id="diagWatchlist">230 F&O Stocks & Indices Loaded</div>
-            </div>
-
-            <div style="font-size: 0.8rem; color: var(--bb-text-muted); line-height: 1.5; margin-top: 1rem;">
-              💡 <b>Tip:</b> Dhan access tokens expire every 24 hours. When your token expires, generate a new one from your Dhan account and update it here.
-            </div>
-          </div>
         </div>
-
       </div>
-    </div>
 
     <!-- TAB 4: 🚀 BREAKOUT RADAR & ALPHA LEADERBOARD -->
     <div id="tab-radar" class="tab-content">
@@ -565,6 +608,203 @@
 
         </div>
 
+      </div>
+
+      <!-- TAB 6: 📋 DATA VERIFIER & HISTORICAL CSV WORKSPACE -->
+      <div id="tab-verify" class="tab-content">
+        <div class="verify-container">
+          
+          <!-- Top Toolbar: Date Picker & Actions -->
+          <div class="verify-toolbar">
+            <div class="toolbar-group">
+              <span class="toolbar-label">📅 SELECT TRADING DATE:</span>
+              <div class="date-input-wrap">
+                <input type="date" id="verifyDateInput" onchange="onVerifyDateChanged(this.value)">
+              </div>
+              <button class="quick-date-btn active" id="btnVerifyLatest" onclick="setVerifyQuickDate('latest')">LATEST SESSION</button>
+              <button class="quick-date-btn" id="btnVerifyPrevDay" onclick="setVerifyQuickDate('prev')">PREV SESSION</button>
+              <button class="quick-date-btn" id="btnVerify3Days" onclick="setVerifyQuickDate('3days')">3 DAYS AGO</button>
+              <button class="quick-date-btn" id="btnVerify1Week" onclick="setVerifyQuickDate('1week')">1 WEEK AGO</button>
+            </div>
+
+            <div class="toolbar-group">
+              <button class="action-btn toggle-filters-btn" id="btnToggleVerifyFilters" onclick="toggleVerifyFilterMatrix()" title="Toggle Search & Multi-Column Filters">
+                <span id="verifyFilterBtnIcon">🔼</span> <span id="verifyFilterBtnText">HIDE FILTERS</span>
+              </button>
+              <button class="action-btn telegram-csv-btn" onclick="sendVerifyCsvToTelegram()" title="Send complete 217-instrument CSV to both Telegram accounts in one click">
+                <span>📲</span> SEND CSV TO TELEGRAM
+              </button>
+              <button class="action-btn" onclick="loadVerificationData(currentVerifyDate)">
+                <span>🔄</span> REFRESH DATA
+              </button>
+              <button class="action-btn export-btn" onclick="exportVerifyCsv()">
+                <span>📥</span> EXPORT FULL CSV
+              </button>
+            </div>
+          </div>
+
+          <!-- KPI Summary Grid -->
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-title">TOTAL INSTRUMENTS</div>
+              <div class="kpi-value val-amber" id="verifyKpiTotalCount">0</div>
+              <div class="kpi-sub" id="verifyKpiShowingCount">Showing 0 matching</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">SELECTED DATE</div>
+              <div class="kpi-value val-highlight" id="verifyKpiTargetDate">--</div>
+              <div class="kpi-sub" id="verifyKpiPrevDateLabel">Prev Date: --</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">ACTIVE BREAKOUTS (PDH)</div>
+              <div class="kpi-value val-down" id="verifyKpiBreakoutCount">0</div>
+              <div class="kpi-sub">Today High &gt; Prev Day High</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">MARKET BREADTH</div>
+              <div class="kpi-value" id="verifyKpiBreadth">
+                <span class="val-up" id="verifyKpiAdvances">0</span> / <span class="val-down" id="verifyKpiDeclines">0</span>
+              </div>
+              <div class="kpi-sub">Advances / Declines</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">AVG UNIVERSE % CHANGE</div>
+              <div class="kpi-value" id="verifyKpiAvgPct">0.00%</div>
+              <div class="kpi-sub" id="verifyKpiTopMovers">Top Gainer / Loser</div>
+            </div>
+          </div>
+
+          <!-- Comprehensive Filter Matrix for all Table Columns & Percentages -->
+          <div class="filter-matrix" id="verifyFilterMatrixBox">
+            <div class="filter-matrix-header" onclick="toggleVerifyFilterMatrix()">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span id="verifyFilterToggleIcon" style="color: var(--bb-amber); font-size: 0.85rem; font-weight: 800;">▼</span>
+                <span style="font-weight: 800; font-size: 0.82rem; color: var(--bb-amber); letter-spacing: 0.5px;">🔍 SEARCH &amp; MULTI-COLUMN FILTERS</span>
+                <span class="active-filter-badge" id="verifyActiveFilterBadge" style="display: none;">0 Active Filters</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.6rem;">
+                <button class="btn-reset" onclick="event.stopPropagation(); resetAllVerifyFilters()" title="Reset all search queries and filters">✕ RESET ALL</button>
+                <span id="verifyFilterCollapseHint" style="font-size: 0.72rem; color: var(--bb-cyan); font-weight: 700;">[ CLICK TO TOGGLE ]</span>
+              </div>
+            </div>
+
+            <!-- Collapsible Body Content -->
+            <div class="filter-matrix-content" id="verifyFilterMatrixContent">
+              <!-- Row 1: Search, Segment, Net Change %, and Breakout filters -->
+              <div class="filter-matrix-row">
+                <div class="filter-controls-wrap">
+                  <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber);">🔍 SEARCH:</span>
+                  <input type="text" id="verifySymbolSearchInput" class="search-input" placeholder="Search by name (e.g. NIFTY, RELIANCE, TCS)..." oninput="applyVerifyFilters()">
+                  
+                  <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">SEGMENT:</span>
+                  <select id="verifyFilterSegment" class="filter-select" onchange="applyVerifyFilters()">
+                    <option value="ALL">All Segments (217+)</option>
+                    <option value="INDICES">Indices (IDX_I)</option>
+                    <option value="EQUITIES">Equities (NSE_EQ)</option>
+                    <option value="MCX">Commodities (MCX)</option>
+                  </select>
+
+                  <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">NET CHANGE %:</span>
+                  <select id="verifyFilterNetChange" class="filter-select" onchange="applyVerifyFilters()">
+                    <option value="ALL">All % Changes</option>
+                    <option value="GAINERS">▲ Gainers (&gt; 0%)</option>
+                    <option value="LOSERS">▼ Losers (&lt; 0%)</option>
+                    <option value="PLUS_1">🚀 +1% or Higher</option>
+                    <option value="PLUS_2">🚀 +2% or Higher</option>
+                    <option value="PLUS_3">🔥 +3% or Higher</option>
+                    <option value="MINUS_1">🔻 -1% or Lower</option>
+                    <option value="MINUS_2">🔻 -2% or Lower</option>
+                    <option value="MINUS_3">💥 -3% or Lower</option>
+                  </select>
+
+                  <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">PDH BREAKOUT:</span>
+                  <select id="verifyFilterBreakout" class="filter-select" onchange="applyVerifyFilters()">
+                    <option value="ALL">All Stocks</option>
+                    <option value="BREAKOUTS">🔥 Above PDH (&gt; 0%)</option>
+                    <option value="NEAR_BREAKOUT">🎯 Near PDH (Within 1.5%)</option>
+                    <option value="NORMAL">Normal / Decaying</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Row 2: Percentage Presets & Custom % Min/Max Range -->
+              <div class="filter-matrix-row">
+                <div class="pct-filter-tabs">
+                  <span style="font-size: 0.75rem; color: var(--bb-amber); font-weight: 700; margin-right: 0.3rem;">% PRESETS:</span>
+                  <button class="pct-btn active" onclick="setVerifyPctPreset('ALL', this)">ALL %</button>
+                  <button class="pct-btn up" onclick="setVerifyPctPreset('+1', this)">+1% ▲</button>
+                  <button class="pct-btn up" onclick="setVerifyPctPreset('+2', this)">+2% ▲</button>
+                  <button class="pct-btn up" onclick="setVerifyPctPreset('+3', this)">+3% ▲</button>
+                  <button class="pct-btn down" onclick="setVerifyPctPreset('-1', this)">-1% ▼</button>
+                  <button class="pct-btn down" onclick="setVerifyPctPreset('-2', this)">-2% ▼</button>
+                  <button class="pct-btn down" onclick="setVerifyPctPreset('-3', this)">-3% ▼</button>
+                </div>
+
+                <div class="filter-controls-wrap">
+                  <span style="font-size: 0.78rem; color: var(--bb-text-muted);">% CHANGE RANGE:</span>
+                  <input type="number" id="verifyMinPctInput" class="range-input" placeholder="Min %" step="0.1" oninput="applyVerifyFilters()">
+                  <span style="color: var(--bb-text-muted);">-</span>
+                  <input type="number" id="verifyMaxPctInput" class="range-input" placeholder="Max %" step="0.1" oninput="applyVerifyFilters()">
+
+                  <span style="font-size: 0.78rem; color: var(--bb-text-muted); margin-left: 0.5rem;">PRICE RANGE ₹:</span>
+                  <input type="number" id="verifyMinPriceInput" class="range-input" placeholder="Min ₹" oninput="applyVerifyFilters()">
+                  <span style="color: var(--bb-text-muted);">-</span>
+                  <input type="number" id="verifyMaxPriceInput" class="range-input" placeholder="Max ₹" oninput="applyVerifyFilters()">
+
+                  <span style="font-size: 0.78rem; color: var(--bb-text-muted); margin-left: 0.5rem;">SORT BY:</span>
+                  <select id="verifySortColumnSelect" class="filter-select" onchange="onVerifySortSelect(this.value)">
+                    <option value="index_asc"># (Default Order)</option>
+                    <option value="pctChange_desc">Net % Change (Top Gainers ▲)</option>
+                    <option value="pctChange_asc">Net % Change (Top Losers ▼)</option>
+                    <option value="pdhPctDiff_desc">High vs PDH % (Top Breakouts 🔥)</option>
+                    <option value="dayRangePct_desc">Day Range % (Highest Volatility ⚡)</option>
+                    <option value="name_asc">Stock Name (A → Z)</option>
+                    <option value="name_desc">Stock Name (Z → A)</option>
+                    <option value="todayClose_desc">Today Close ₹ (Highest → Lowest)</option>
+                    <option value="prevDayHigh_desc">Prev Day High ₹ (Highest → Lowest)</option>
+                    <option value="straddlePrice_desc">Straddle LTP ₹ (Highest → Lowest)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Data Table with Click-to-Sort Headers -->
+          <div class="table-wrapper">
+            <table class="verify-table">
+              <thead>
+                <tr>
+                  <th class="text-center" onclick="handleVerifyHeaderSort('index')"># <span class="sort-icon" id="vsort_index">▲</span></th>
+                  <th class="text-left" onclick="handleVerifyHeaderSort('name')">STOCK / INSTRUMENT <span class="sort-icon" id="vsort_name">⇅</span></th>
+                  <th class="text-center" onclick="handleVerifyHeaderSort('segment')">SEGMENT <span class="sort-icon" id="vsort_segment">⇅</span></th>
+                  <th class="text-center" onclick="handleVerifyHeaderSort('date')">DATE <span class="sort-icon" id="vsort_date">⇅</span></th>
+                  <th onclick="handleVerifyHeaderSort('prevDayHigh')">PREV DAY HIGH (PDH) ₹ <span class="sort-icon" id="vsort_prevDayHigh">⇅</span></th>
+                  <th onclick="handleVerifyHeaderSort('prevDayClose')">PREV DAY CLOSE ₹ <span class="sort-icon" id="vsort_prevDayClose">⇅</span></th>
+                  <th onclick="handleVerifyHeaderSort('todayOpen')">TODAY OPEN ₹ <span class="sort-icon" id="vsort_todayOpen">⇅</span></th>
+                  <th onclick="handleVerifyHeaderSort('todayHigh')">TODAY HIGH ₹ <span class="sort-icon" id="vsort_todayHigh">⇅</span></th>
+                  <th onclick="handleVerifyHeaderSort('todayLow')">TODAY LOW ₹ <span class="sort-icon" id="vsort_todayLow">⇅</span></th>
+                  <th onclick="handleVerifyHeaderSort('todayClose')">TODAY CLOSE / LTP ₹ <span class="sort-icon" id="vsort_todayClose">⇅</span></th>
+                  <th onclick="handleVerifyHeaderSort('pctChange')">NET CHANGE (%) <span class="sort-icon" id="vsort_pctChange">⇅</span></th>
+                  <th onclick="handleVerifyHeaderSort('pdhPctDiff')">HIGH vs PDH (%) <span class="sort-icon" id="vsort_pdhPctDiff">⇅</span></th>
+                  <th onclick="handleVerifyHeaderSort('dayRangePct')">DAY RANGE (%) <span class="sort-icon" id="vsort_dayRangePct">⇅</span></th>
+                  <th class="text-center" onclick="handleVerifyHeaderSort('atmStrike')">ATM STRIKE <span class="sort-icon" id="vsort_atmStrike">⇅</span></th>
+                  <th onclick="handleVerifyHeaderSort('straddlePrice')">STRADDLE LTP ₹ <span class="sort-icon" id="vsort_straddlePrice">⇅</span></th>
+                  <th onclick="handleVerifyHeaderSort('prevDayHighStraddle')">STRADDLE PDH ₹ <span class="sort-icon" id="vsort_prevDayHighStraddle">⇅</span></th>
+                  <th class="text-center" onclick="handleVerifyHeaderSort('isBreakout')">BREAKOUT STATUS <span class="sort-icon" id="vsort_isBreakout">⇅</span></th>
+                  <th class="text-center">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody id="verifyTableBody">
+                <tr>
+                  <td colspan="18" style="text-align: center; padding: 2.5rem; color: var(--bb-text-muted);">
+                    Loading authentic Dhan Marketfeed &amp; Daily OHLC records for all 217+ instruments...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
       </div>
 
     </div>
