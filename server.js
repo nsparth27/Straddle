@@ -2574,6 +2574,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Unified Umbrella Redirects: Ensure no standalone pages exist
+  if (pathname === '/verify.html' || pathname === '/verify') {
+    res.writeHead(302, { 'Location': '/?tab=verify' });
+    res.end();
+    return;
+  }
+  if (pathname === '/charts.html' || pathname === '/charts') {
+    res.writeHead(302, { 'Location': '/?tab=charts' });
+    res.end();
+    return;
+  }
+
   // Serve static files
   let reqPath = '/';
   try {

@@ -26,6 +26,12 @@ let searchQuery = '';
 document.addEventListener('DOMContentLoaded', () => {
   loadSettings();
   fetchStatus();
+  const urlParams = new URLSearchParams(window.location.search);
+  const tabParam = urlParams.get('tab');
+  if (tabParam) {
+    const cleanTab = tabParam.replace('tab-', '');
+    switchTab(cleanTab);
+  }
 });
 
 // Global State & Comprehensive Company Aliases
@@ -725,7 +731,6 @@ function renderSymbolCard(sym, isMarketOpen) {
 
 // Fetch & Update Live Status from Server
 async function fetchStatus() {
-  if (sessionStorage.getItem('terminal_auth') !== 'true') return;
   try {
     const res = await fetch('/api/status');
     if (!res.ok) return;
