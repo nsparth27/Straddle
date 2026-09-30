@@ -24,7 +24,7 @@ function showToast(msg, type = 'success') {
 }
 
 function checkTerminalAuth() {
-  const isAuth = sessionStorage.getItem('terminal_auth') === 'true';
+  const isAuth = sessionStorage.getItem('terminal_auth') === 'true' || localStorage.getItem('terminal_auth') === 'true';
   const modal = document.getElementById('pinLockModal');
   if (!modal) return isAuth;
 
@@ -38,6 +38,7 @@ function checkTerminalAuth() {
   }
 
   if (isAuth) {
+    sessionStorage.setItem('terminal_auth', 'true');
     modal.style.display = 'none';
     return true;
   } else {
@@ -147,7 +148,11 @@ async function verifyPin() {
 
     if (res.ok && data.ok) {
       sessionStorage.setItem('terminal_auth', 'true');
-      if (data.token) sessionStorage.setItem('terminal_session', data.token);
+      localStorage.setItem('terminal_auth', 'true');
+      if (data.token) {
+        sessionStorage.setItem('terminal_session', data.token);
+        localStorage.setItem('terminal_session', data.token);
+      }
       localStorage.removeItem('terminal_block_until');
       if (modal) modal.style.display = 'none';
       if (errorEl) errorEl.style.display = 'none';
@@ -187,6 +192,9 @@ async function verifyPin() {
 
 function lockTerminal() {
   sessionStorage.removeItem('terminal_auth');
+  sessionStorage.removeItem('terminal_session');
+  localStorage.removeItem('terminal_auth');
+  localStorage.removeItem('terminal_session');
   checkTerminalAuth();
 }
 

@@ -717,14 +717,14 @@
     let currentSegment = 'ALL';
     let currentSortKey = 'index';
     let currentSortDir = 'asc';
-    let currentPctPreset = 'ALL';
     const TERMINAL_PIN = '2712';
-    const PIN_KEY = 'dhan_terminal_token';
 
-    // PIN Authentication
+    // Unified Shared PIN Authentication
     function checkAuth() {
-      const token = localStorage.getItem(PIN_KEY);
-      if (token) {
+      const isAuth = sessionStorage.getItem('terminal_auth') === 'true' || localStorage.getItem('terminal_auth') === 'true';
+      if (isAuth) {
+        sessionStorage.setItem('terminal_auth', 'true');
+        localStorage.setItem('terminal_auth', 'true');
         document.getElementById('pinLockModal').style.display = 'none';
         return true;
       }
@@ -746,7 +746,12 @@
         });
         const data = await res.json();
         if (data.ok) {
-          localStorage.setItem(PIN_KEY, data.token || 'auth_ok');
+          sessionStorage.setItem('terminal_auth', 'true');
+          localStorage.setItem('terminal_auth', 'true');
+          if (data.token) {
+            sessionStorage.setItem('terminal_session', data.token);
+            localStorage.setItem('terminal_session', data.token);
+          }
           document.getElementById('pinLockModal').style.display = 'none';
           initApp();
         } else {
@@ -755,7 +760,8 @@
         }
       } catch (err) {
         if (pin === TERMINAL_PIN) {
-          localStorage.setItem(PIN_KEY, 'auth_ok');
+          sessionStorage.setItem('terminal_auth', 'true');
+          localStorage.setItem('terminal_auth', 'true');
           document.getElementById('pinLockModal').style.display = 'none';
           initApp();
         } else {
@@ -765,7 +771,10 @@
     }
 
     function lockTerminal() {
-      localStorage.removeItem(PIN_KEY);
+      sessionStorage.removeItem('terminal_auth');
+      sessionStorage.removeItem('terminal_session');
+      localStorage.removeItem('terminal_auth');
+      localStorage.removeItem('terminal_session');
       document.getElementById('pinLockModal').style.display = 'flex';
       document.getElementById('pinInput').value = '';
     }
