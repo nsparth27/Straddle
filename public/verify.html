@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="style.css">
   <style>
     .verify-container {
-      max-width: 1750px;
+      max-width: 1800px;
       margin: 0 auto;
       padding: 1.25rem;
       display: flex;
@@ -147,7 +147,7 @@
     /* KPI Summary Cards */
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
       gap: 1rem;
     }
 
@@ -245,7 +245,7 @@
       font-size: 0.8rem;
       padding: 0.4rem 0.6rem;
       border-radius: 4px;
-      width: 100px;
+      width: 90px;
       outline: none;
     }
 
@@ -253,6 +253,13 @@
       display: flex;
       gap: 0.4rem;
       flex-wrap: wrap;
+    }
+
+    .pct-filter-tabs {
+      display: flex;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+      align-items: center;
     }
 
     .seg-btn {
@@ -272,6 +279,37 @@
       background: rgba(255, 176, 0, 0.15);
       border-color: var(--bb-amber);
       color: var(--bb-amber);
+    }
+
+    .pct-btn {
+      background: var(--bb-input-bg);
+      border: 1px solid var(--bb-panel-border);
+      color: var(--bb-text-muted);
+      font-family: var(--bb-font);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.25rem 0.55rem;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .pct-btn.up:hover, .pct-btn.up.active {
+      background: rgba(0, 230, 118, 0.15);
+      border-color: var(--bb-green);
+      color: var(--bb-green);
+    }
+
+    .pct-btn.down:hover, .pct-btn.down.active {
+      background: rgba(255, 61, 0, 0.15);
+      border-color: var(--bb-red);
+      color: var(--bb-red);
+    }
+
+    .pct-btn.active {
+      background: var(--bb-cyan);
+      color: #000;
+      border-color: var(--bb-cyan);
     }
 
     .btn-reset {
@@ -392,6 +430,33 @@
     .val-amber {
       color: var(--bb-amber);
       font-weight: 700;
+    }
+
+    .pill-pct {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.15rem 0.45rem;
+      border-radius: 3px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    .pill-pct.up {
+      background: rgba(0, 230, 118, 0.15);
+      color: var(--bb-green);
+      border: 1px solid rgba(0, 230, 118, 0.3);
+    }
+
+    .pill-pct.down {
+      background: rgba(255, 61, 0, 0.15);
+      color: var(--bb-red);
+      border: 1px solid rgba(255, 61, 0, 0.3);
+    }
+
+    .pill-pct.neutral {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--bb-text-muted);
     }
 
     /* Toast Notification */
@@ -515,11 +580,16 @@
         </div>
         <div class="kpi-sub">Advances / Declines</div>
       </div>
+      <div class="kpi-card">
+        <div class="kpi-title">AVG UNIVERSE % CHANGE</div>
+        <div class="kpi-value" id="kpiAvgPct">0.00%</div>
+        <div class="kpi-sub" id="kpiTopMovers">Top Gainer / Loser</div>
+      </div>
     </div>
 
-    <!-- Comprehensive Filter Matrix for all Table Columns -->
+    <!-- Comprehensive Filter Matrix for all Table Columns & Percentages -->
     <div class="filter-matrix">
-      <!-- Row 1: Search, Segment, Net Change, and Breakout filters -->
+      <!-- Row 1: Search, Segment, Net Change %, and Breakout filters -->
       <div class="filter-matrix-row">
         <div class="filter-controls-wrap">
           <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber);">🔍 SEARCH:</span>
@@ -533,39 +603,51 @@
             <option value="MCX">Commodities (MCX)</option>
           </select>
 
-          <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">NET CHANGE (%):</span>
+          <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">NET CHANGE %:</span>
           <select id="filterNetChange" class="filter-select" onchange="applyFilters()">
-            <option value="ALL">All Changes</option>
-            <option value="GAINERS">▲ Gainers Only (> 0%)</option>
-            <option value="LOSERS">▼ Losers Only (< 0%)</option>
-            <option value="LARGE_GAINERS">🚀 Large Gainers (≥ +2%)</option>
-            <option value="LARGE_LOSERS">🔻 Large Losers (≤ -2%)</option>
+            <option value="ALL">All % Changes</option>
+            <option value="GAINERS">▲ Gainers (> 0%)</option>
+            <option value="LOSERS">▼ Losers (< 0%)</option>
+            <option value="PLUS_1">🚀 +1% or Higher</option>
+            <option value="PLUS_2">🚀 +2% or Higher</option>
+            <option value="PLUS_3">🔥 +3% or Higher</option>
+            <option value="MINUS_1">🔻 -1% or Lower</option>
+            <option value="MINUS_2">🔻 -2% or Lower</option>
+            <option value="MINUS_3">💥 -3% or Lower</option>
           </select>
 
-          <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">STATUS:</span>
+          <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">PDH BREAKOUT:</span>
           <select id="filterBreakout" class="filter-select" onchange="applyFilters()">
             <option value="ALL">All Stocks</option>
-            <option value="BREAKOUTS">🔥 PDH Breakouts Only</option>
-            <option value="NORMAL">Normal / Decaying Only</option>
+            <option value="BREAKOUTS">🔥 Above PDH (> 0%)</option>
+            <option value="NEAR_BREAKOUT">🎯 Near PDH (Within 1.5%)</option>
+            <option value="NORMAL">Normal / Decaying</option>
           </select>
         </div>
 
         <button class="btn-reset" onclick="resetAllFilters()">✕ RESET ALL FILTERS</button>
       </div>
 
-      <!-- Row 2: Segment Quick Buttons and Price Range Filter -->
+      <!-- Row 2: Percentage Presets & Custom % Min/Max Range -->
       <div class="filter-matrix-row">
-        <div class="segment-filter-tabs">
-          <span style="font-size: 0.75rem; color: var(--bb-text-muted); align-self: center; margin-right: 0.3rem;">QUICK TABS:</span>
-          <button class="seg-btn active" onclick="setSegmentTab('ALL', this)">ALL</button>
-          <button class="seg-btn" onclick="setSegmentTab('INDICES', this)">INDICES</button>
-          <button class="seg-btn" onclick="setSegmentTab('EQUITIES', this)">EQUITIES</button>
-          <button class="seg-btn" onclick="setSegmentTab('MCX', this)">COMMODITIES</button>
-          <button class="seg-btn" onclick="setSegmentTab('BREAKOUTS', this)">🔥 BREAKOUTS ONLY</button>
+        <div class="pct-filter-tabs">
+          <span style="font-size: 0.75rem; color: var(--bb-amber); font-weight: 700; margin-right: 0.3rem;">% PRESETS:</span>
+          <button class="pct-btn active" onclick="setPctPreset('ALL', this)">ALL %</button>
+          <button class="pct-btn up" onclick="setPctPreset('+1', this)">+1% ▲</button>
+          <button class="pct-btn up" onclick="setPctPreset('+2', this)">+2% ▲</button>
+          <button class="pct-btn up" onclick="setPctPreset('+3', this)">+3% ▲</button>
+          <button class="pct-btn down" onclick="setPctPreset('-1', this)">-1% ▼</button>
+          <button class="pct-btn down" onclick="setPctPreset('-2', this)">-2% ▼</button>
+          <button class="pct-btn down" onclick="setPctPreset('-3', this)">-3% ▼</button>
         </div>
 
         <div class="filter-controls-wrap">
-          <span style="font-size: 0.78rem; color: var(--bb-text-muted);">PRICE RANGE ₹:</span>
+          <span style="font-size: 0.78rem; color: var(--bb-text-muted);">% CHANGE RANGE:</span>
+          <input type="number" id="minPctInput" class="range-input" placeholder="Min %" step="0.1" oninput="applyFilters()">
+          <span style="color: var(--bb-text-muted);">-</span>
+          <input type="number" id="maxPctInput" class="range-input" placeholder="Max %" step="0.1" oninput="applyFilters()">
+
+          <span style="font-size: 0.78rem; color: var(--bb-text-muted); margin-left: 0.5rem;">PRICE RANGE ₹:</span>
           <input type="number" id="minPriceInput" class="range-input" placeholder="Min ₹" oninput="applyFilters()">
           <span style="color: var(--bb-text-muted);">-</span>
           <input type="number" id="maxPriceInput" class="range-input" placeholder="Max ₹" oninput="applyFilters()">
@@ -573,15 +655,14 @@
           <span style="font-size: 0.78rem; color: var(--bb-text-muted); margin-left: 0.5rem;">SORT BY:</span>
           <select id="sortColumnSelect" class="filter-select" onchange="onSortSelect(this.value)">
             <option value="index_asc"># (Default Order)</option>
+            <option value="pctChange_desc">Net % Change (Top Gainers ▲)</option>
+            <option value="pctChange_asc">Net % Change (Top Losers ▼)</option>
+            <option value="pdhPctDiff_desc">High vs PDH % (Top Breakouts 🔥)</option>
+            <option value="dayRangePct_desc">Day Range % (Highest Volatility ⚡)</option>
             <option value="name_asc">Stock Name (A → Z)</option>
             <option value="name_desc">Stock Name (Z → A)</option>
-            <option value="pctChange_desc">Net Change % (Highest → Lowest)</option>
-            <option value="pctChange_asc">Net Change % (Lowest → Highest)</option>
             <option value="todayClose_desc">Today Close ₹ (Highest → Lowest)</option>
-            <option value="todayClose_asc">Today Close ₹ (Lowest → Highest)</option>
             <option value="prevDayHigh_desc">Prev Day High ₹ (Highest → Lowest)</option>
-            <option value="todayHigh_desc">Today High ₹ (Highest → Lowest)</option>
-            <option value="todayLow_asc">Today Low ₹ (Lowest → Highest)</option>
             <option value="straddlePrice_desc">Straddle LTP ₹ (Highest → Lowest)</option>
           </select>
         </div>
@@ -604,6 +685,8 @@
             <th onclick="handleHeaderSort('todayLow')">TODAY LOW ₹ <span class="sort-icon" id="sort_todayLow">⇅</span></th>
             <th onclick="handleHeaderSort('todayClose')">TODAY CLOSE / LTP ₹ <span class="sort-icon" id="sort_todayClose">⇅</span></th>
             <th onclick="handleHeaderSort('pctChange')">NET CHANGE (%) <span class="sort-icon" id="sort_pctChange">⇅</span></th>
+            <th onclick="handleHeaderSort('pdhPctDiff')">HIGH vs PDH (%) <span class="sort-icon" id="sort_pdhPctDiff">⇅</span></th>
+            <th onclick="handleHeaderSort('dayRangePct')">DAY RANGE (%) <span class="sort-icon" id="sort_dayRangePct">⇅</span></th>
             <th class="text-center" onclick="handleHeaderSort('atmStrike')">ATM STRIKE <span class="sort-icon" id="sort_atmStrike">⇅</span></th>
             <th onclick="handleHeaderSort('straddlePrice')">STRADDLE LTP ₹ <span class="sort-icon" id="sort_straddlePrice">⇅</span></th>
             <th onclick="handleHeaderSort('prevDayHighStraddle')">STRADDLE PDH ₹ <span class="sort-icon" id="sort_prevDayHighStraddle">⇅</span></th>
@@ -613,7 +696,7 @@
         </thead>
         <tbody id="verifyTableBody">
           <tr>
-            <td colspan="16" style="text-align: center; padding: 2.5rem; color: var(--bb-text-muted);">
+            <td colspan="18" style="text-align: center; padding: 2.5rem; color: var(--bb-text-muted);">
               🔄 Loading authentic historical and live data from Dhan API...
             </td>
           </tr>
@@ -633,7 +716,8 @@
     let currentDate = '';
     let currentSegment = 'ALL';
     let currentSortKey = 'index';
-    let currentSortDir = 'asc'; // 'asc' | 'desc'
+    let currentSortDir = 'asc';
+    let currentPctPreset = 'ALL';
     const TERMINAL_PIN = '2712';
     const PIN_KEY = 'dhan_terminal_token';
 
@@ -706,7 +790,7 @@
     // Load Verification Data from Backend
     async function loadVerificationData(targetDate = '') {
       const tbody = document.getElementById('verifyTableBody');
-      tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 2.5rem; color: var(--bb-amber);">🔄 Querying Dhan API historical daily OHLC for date: <b>${targetDate || 'Latest'}</b>...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="18" style="text-align: center; padding: 2.5rem; color: var(--bb-amber);">🔄 Querying Dhan API historical daily OHLC for date: <b>${targetDate || 'Latest'}</b>...</td></tr>`;
 
       try {
         const url = targetDate ? `/api/verify-data?date=${encodeURIComponent(targetDate)}` : '/api/verify-data';
@@ -715,7 +799,21 @@
         const json = await res.json();
 
         if (json.status === 'success' && Array.isArray(json.data)) {
-          rawDataset = json.data.map((item, idx) => ({ ...item, index: idx + 1 }));
+          rawDataset = json.data.map((item, idx) => {
+            const todayHigh = Number(item.todayHigh || 0);
+            const prevHigh = Number(item.prevDayHigh || 1);
+            const todayLow = Number(item.todayLow || 1);
+            const pdhPctDiff = parseFloat((((todayHigh - prevHigh) / prevHigh) * 100).toFixed(2));
+            const dayRangePct = parseFloat((((todayHigh - todayLow) / todayLow) * 100).toFixed(2));
+
+            return {
+              ...item,
+              index: idx + 1,
+              pdhPctDiff,
+              dayRangePct
+            };
+          });
+
           currentDate = json.targetDate || targetDate;
           
           document.getElementById('selectedDateInput').value = currentDate;
@@ -728,10 +826,10 @@
           updateKpis();
           showToast(`✅ Loaded ${rawDataset.length} instruments for ${currentDate}`);
         } else {
-          tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 2.5rem; color: var(--bb-red);">❌ Could not load verification data.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="18" style="text-align: center; padding: 2.5rem; color: var(--bb-red);">❌ Could not load verification data.</td></tr>`;
         }
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 2.5rem; color: var(--bb-red);">❌ Error connecting to server: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="18" style="text-align: center; padding: 2.5rem; color: var(--bb-red);">❌ Error connecting to server: ${err.message}</td></tr>`;
       }
     }
 
@@ -762,7 +860,7 @@
     }
 
     function updateSortHeaderIcons() {
-      const keys = ['index', 'name', 'segment', 'date', 'prevDayHigh', 'prevDayClose', 'todayOpen', 'todayHigh', 'todayLow', 'todayClose', 'pctChange', 'atmStrike', 'straddlePrice', 'prevDayHighStraddle', 'isBreakout'];
+      const keys = ['index', 'name', 'segment', 'date', 'prevDayHigh', 'prevDayClose', 'todayOpen', 'todayHigh', 'todayLow', 'todayClose', 'pctChange', 'pdhPctDiff', 'dayRangePct', 'atmStrike', 'straddlePrice', 'prevDayHighStraddle', 'isBreakout'];
       keys.forEach(k => {
         const iconEl = document.getElementById(`sort_${k}`);
         if (iconEl) {
@@ -777,6 +875,40 @@
       });
     }
 
+    // Quick % Presets
+    function setPctPreset(preset, btn) {
+      currentPctPreset = preset;
+      document.querySelectorAll('.pct-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      const minPctInput = document.getElementById('minPctInput');
+      const maxPctInput = document.getElementById('maxPctInput');
+      
+      if (preset === 'ALL') {
+        minPctInput.value = '';
+        maxPctInput.value = '';
+      } else if (preset === '+1') {
+        minPctInput.value = '1.0';
+        maxPctInput.value = '';
+      } else if (preset === '+2') {
+        minPctInput.value = '2.0';
+        maxPctInput.value = '';
+      } else if (preset === '+3') {
+        minPctInput.value = '3.0';
+        maxPctInput.value = '';
+      } else if (preset === '-1') {
+        minPctInput.value = '';
+        maxPctInput.value = '-1.0';
+      } else if (preset === '-2') {
+        minPctInput.value = '';
+        maxPctInput.value = '-2.0';
+      } else if (preset === '-3') {
+        minPctInput.value = '';
+        maxPctInput.value = '-3.0';
+      }
+      applyFilters();
+    }
+
     // Apply All Filters & Sorting
     function applyFilters() {
       const searchVal = (document.getElementById('symbolSearchInput').value || '').toUpperCase().trim();
@@ -785,6 +917,8 @@
       const breakoutVal = document.getElementById('filterBreakout').value;
       const minPrice = parseFloat(document.getElementById('minPriceInput').value) || null;
       const maxPrice = parseFloat(document.getElementById('maxPriceInput').value) || null;
+      const minPct = parseFloat(document.getElementById('minPctInput').value) || null;
+      const maxPct = parseFloat(document.getElementById('maxPctInput').value) || null;
 
       filteredDataset = rawDataset.filter(item => {
         // 1. Search filter
@@ -797,18 +931,28 @@
         if (segVal === 'EQUITIES' && (seg !== 'NSE_EQ' || isMcx)) return false;
         if (segVal === 'MCX' && !isMcx) return false;
 
-        // 3. Net Change filter
+        // 3. Net Change Dropdown filter
         const chg = item.pctChange || 0;
         if (netChangeVal === 'GAINERS' && chg <= 0) return false;
         if (netChangeVal === 'LOSERS' && chg >= 0) return false;
-        if (netChangeVal === 'LARGE_GAINERS' && chg < 2) return false;
-        if (netChangeVal === 'LARGE_LOSERS' && chg > -2) return false;
+        if (netChangeVal === 'PLUS_1' && chg < 1) return false;
+        if (netChangeVal === 'PLUS_2' && chg < 2) return false;
+        if (netChangeVal === 'PLUS_3' && chg < 3) return false;
+        if (netChangeVal === 'MINUS_1' && chg > -1) return false;
+        if (netChangeVal === 'MINUS_2' && chg > -2) return false;
+        if (netChangeVal === 'MINUS_3' && chg > -3) return false;
 
-        // 4. Breakout filter
+        // 4. Custom % Range filter
+        if (minPct !== null && chg < minPct) return false;
+        if (maxPct !== null && chg > maxPct) return false;
+
+        // 5. Breakout filter
+        const pdhDiff = item.pdhPctDiff || 0;
         if (breakoutVal === 'BREAKOUTS' && !item.isBreakout) return false;
+        if (breakoutVal === 'NEAR_BREAKOUT' && (item.isBreakout || pdhDiff < -1.5)) return false;
         if (breakoutVal === 'NORMAL' && item.isBreakout) return false;
 
-        // 5. Price Range filter
+        // 6. Price Range filter
         const closePrice = item.todayClose || 0;
         if (minPrice !== null && closePrice < minPrice) return false;
         if (maxPrice !== null && closePrice > maxPrice) return false;
@@ -840,7 +984,7 @@
     function renderTable() {
       const tbody = document.getElementById('verifyTableBody');
       if (filteredDataset.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 2.5rem; color: var(--bb-text-muted);">No symbols matching filter criteria.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="18" style="text-align: center; padding: 2.5rem; color: var(--bb-text-muted);">No symbols matching filter criteria.</td></tr>`;
         return;
       }
 
@@ -849,9 +993,16 @@
         const isUp = row.netChange >= 0;
         const changeClass = isUp ? 'val-up' : 'val-down';
         const changeSign = isUp ? '+' : '';
+        const pctSign = row.pctChange >= 0 ? '+' : '';
+        
         const breakoutBadge = row.isBreakout 
           ? `<span class="badge-breakout">🔥 PDH BREAKOUT</span>` 
           : `<span class="badge-normal">NORMAL</span>`;
+
+        // High vs PDH Pill
+        const isPdhCross = row.pdhPctDiff >= 0;
+        const pdhPillClass = isPdhCross ? 'up' : (row.pdhPctDiff >= -1.5 ? 'neutral' : 'down');
+        const pdhPillSign = isPdhCross ? '+' : '';
 
         html += `
           <tr>
@@ -868,7 +1019,17 @@
             <td style="color: var(--bb-text-main);">₹${fmtNum(row.todayLow)}</td>
             <td style="font-weight: 800; color: #FFF;">₹${fmtNum(row.todayClose)}</td>
             <td class="${changeClass}">
-              ${changeSign}${fmtNum(row.netChange)} (${changeSign}${fmtNum(row.pctChange)}%)
+              <span class="pill-pct ${isUp ? 'up' : 'down'}">
+                ${changeSign}₹${fmtNum(row.netChange)} (${pctSign}${fmtNum(row.pctChange)}%)
+              </span>
+            </td>
+            <td>
+              <span class="pill-pct ${pdhPillClass}">
+                ${pdhPillSign}${fmtNum(row.pdhPctDiff)}% ${isPdhCross ? '▲ ABOVE' : '▼'}
+              </span>
+            </td>
+            <td style="color: var(--bb-cyan); font-weight: 700;">
+              ${fmtNum(row.dayRangePct)}%
             </td>
             <td class="text-center val-highlight">${row.atmStrike ?? '--'}</td>
             <td class="val-highlight">₹${fmtNum(row.straddlePrice)}</td>
@@ -896,25 +1057,26 @@
       const declines = rawDataset.filter(r => r.netChange < 0).length;
       document.getElementById('kpiAdvances').textContent = `${advances} ▲`;
       document.getElementById('kpiDeclines').textContent = `${declines} ▼`;
+
+      if (rawDataset.length > 0) {
+        const sumPct = rawDataset.reduce((sum, r) => sum + (r.pctChange || 0), 0);
+        const avgPct = sumPct / rawDataset.length;
+        const avgEl = document.getElementById('kpiAvgPct');
+        const avgSign = avgPct >= 0 ? '+' : '';
+        avgEl.textContent = `${avgSign}${avgPct.toFixed(2)}%`;
+        avgEl.className = `kpi-value ${avgPct >= 0 ? 'val-up' : 'val-down'}`;
+
+        const sorted = [...rawDataset].sort((a, b) => (b.pctChange || 0) - (a.pctChange || 0));
+        const topG = sorted[0];
+        const topL = sorted[sorted.length - 1];
+        if (topG && topL) {
+          document.getElementById('kpiTopMovers').innerHTML = `Top: <b class="val-up">${topG.name} (+${topG.pctChange}%)</b> | <b class="val-down">${topL.name} (${topL.pctChange}%)</b>`;
+        }
+      }
     }
 
     // Quick Segment Tabs & Dropdowns
-    function setSegmentTab(seg, btn) {
-      document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      
-      if (seg === 'BREAKOUTS') {
-        document.getElementById('filterBreakout').value = 'BREAKOUTS';
-        document.getElementById('filterSegment').value = 'ALL';
-      } else {
-        document.getElementById('filterBreakout').value = 'ALL';
-        document.getElementById('filterSegment').value = seg;
-      }
-      applyFilters();
-    }
-
     function onSegmentSelect(val) {
-      document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
       applyFilters();
     }
 
@@ -925,12 +1087,15 @@
       document.getElementById('filterBreakout').value = 'ALL';
       document.getElementById('minPriceInput').value = '';
       document.getElementById('maxPriceInput').value = '';
+      document.getElementById('minPctInput').value = '';
+      document.getElementById('maxPctInput').value = '';
       document.getElementById('sortColumnSelect').value = 'index_asc';
       currentSortKey = 'index';
       currentSortDir = 'asc';
+      currentPctPreset = 'ALL';
       updateSortHeaderIcons();
-      document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
-      document.querySelector('.seg-btn').classList.add('active');
+      document.querySelectorAll('.pct-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector('.pct-btn').classList.add('active');
       applyFilters();
       showToast('🔄 Filters reset to default');
     }
@@ -1015,7 +1180,9 @@
         'Today Low INR',
         'Today Close / LTP INR',
         'Net Change INR',
-        'Net Change Pct',
+        'Net Change %',
+        'High vs PDH %',
+        'Day Range %',
         'ATM Strike',
         'Straddle LTP INR',
         'Straddle PDH INR',
@@ -1036,6 +1203,8 @@
         r.todayClose ?? '',
         r.netChange ?? '',
         `${r.pctChange ?? 0}%`,
+        `${r.pdhPctDiff ?? 0}%`,
+        `${r.dayRangePct ?? 0}%`,
         r.atmStrike ?? '',
         r.straddlePrice ?? '',
         r.prevDayHighStraddle ?? '',
