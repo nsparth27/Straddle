@@ -184,10 +184,65 @@
       background: var(--bb-panel);
       border: 1px solid var(--bb-panel-border);
       border-radius: 8px;
-      padding: 1rem 1.25rem;
+      padding: 0.85rem 1.25rem;
       display: flex;
       flex-direction: column;
-      gap: 0.85rem;
+      gap: 0.75rem;
+      transition: all 0.2s ease;
+    }
+
+    .filter-matrix.collapsed {
+      padding: 0.65rem 1.25rem;
+    }
+
+    .filter-matrix.collapsed .filter-matrix-content {
+      display: none;
+    }
+
+    .filter-matrix-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      padding-bottom: 0.25rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .filter-matrix.collapsed .filter-matrix-header {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .filter-matrix-content {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .toggle-filters-btn {
+      background: rgba(0, 229, 255, 0.12);
+      border: 1px solid var(--bb-cyan);
+      color: var(--bb-cyan);
+      font-weight: 800;
+    }
+
+    .toggle-filters-btn:hover {
+      background: var(--bb-cyan);
+      color: #000;
+    }
+
+    .active-filter-badge {
+      display: inline-flex;
+      align-items: center;
+      background: rgba(255, 176, 0, 0.2);
+      border: 1px solid var(--bb-amber);
+      color: var(--bb-amber);
+      font-size: 0.72rem;
+      font-weight: 800;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      margin-left: 0.5rem;
     }
 
     .filter-matrix-row {
@@ -526,6 +581,9 @@
       </div>
 
       <div class="toolbar-group">
+        <button class="action-btn toggle-filters-btn" id="btnToggleFilters" onclick="toggleFilterMatrix()" title="Toggle Search & Multi-Column Filters">
+          <span id="filterBtnIcon">🔼</span> <span id="filterBtnText">HIDE FILTERS</span>
+        </button>
         <button class="action-btn" onclick="loadVerificationData(currentDate)">
           <span>🔄</span> REFRESH DATA
         </button>
@@ -567,83 +625,97 @@
     </div>
 
     <!-- Comprehensive Filter Matrix for all Table Columns & Percentages -->
-    <div class="filter-matrix">
-      <!-- Row 1: Search, Segment, Net Change %, and Breakout filters -->
-      <div class="filter-matrix-row">
-        <div class="filter-controls-wrap">
-          <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber);">🔍 SEARCH:</span>
-          <input type="text" id="symbolSearchInput" class="search-input" placeholder="Search by name (e.g. NIFTY, RELIANCE, TCS)..." oninput="applyFilters()">
-          
-          <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">SEGMENT:</span>
-          <select id="filterSegment" class="filter-select" onchange="onSegmentSelect(this.value)">
-            <option value="ALL">All Segments (217+)</option>
-            <option value="INDICES">Indices (IDX_I)</option>
-            <option value="EQUITIES">Equities (NSE_EQ)</option>
-            <option value="MCX">Commodities (MCX)</option>
-          </select>
-
-          <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">NET CHANGE %:</span>
-          <select id="filterNetChange" class="filter-select" onchange="applyFilters()">
-            <option value="ALL">All % Changes</option>
-            <option value="GAINERS">▲ Gainers (> 0%)</option>
-            <option value="LOSERS">▼ Losers (< 0%)</option>
-            <option value="PLUS_1">🚀 +1% or Higher</option>
-            <option value="PLUS_2">🚀 +2% or Higher</option>
-            <option value="PLUS_3">🔥 +3% or Higher</option>
-            <option value="MINUS_1">🔻 -1% or Lower</option>
-            <option value="MINUS_2">🔻 -2% or Lower</option>
-            <option value="MINUS_3">💥 -3% or Lower</option>
-          </select>
-
-          <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">PDH BREAKOUT:</span>
-          <select id="filterBreakout" class="filter-select" onchange="applyFilters()">
-            <option value="ALL">All Stocks</option>
-            <option value="BREAKOUTS">🔥 Above PDH (> 0%)</option>
-            <option value="NEAR_BREAKOUT">🎯 Near PDH (Within 1.5%)</option>
-            <option value="NORMAL">Normal / Decaying</option>
-          </select>
+    <div class="filter-matrix" id="filterMatrixBox">
+      <!-- Clickable Header to Expand/Collapse -->
+      <div class="filter-matrix-header" onclick="toggleFilterMatrix()">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span id="filterMatrixToggleIcon" style="color: var(--bb-amber); font-size: 0.85rem; font-weight: 800;">▼</span>
+          <span style="font-weight: 800; font-size: 0.82rem; color: var(--bb-amber); letter-spacing: 0.5px;">🔍 SEARCH &amp; MULTI-COLUMN FILTERS</span>
+          <span class="active-filter-badge" id="activeFilterBadge" style="display: none;">0 Active Filters</span>
         </div>
-
-        <button class="btn-reset" onclick="resetAllFilters()">✕ RESET ALL FILTERS</button>
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <button class="btn-reset" onclick="event.stopPropagation(); resetAllFilters()" title="Reset all search queries and filters">✕ RESET ALL</button>
+          <span id="filterCollapseHint" style="font-size: 0.72rem; color: var(--bb-cyan); font-weight: 700;">[ CLICK TO TOGGLE ]</span>
+        </div>
       </div>
 
-      <!-- Row 2: Percentage Presets & Custom % Min/Max Range -->
-      <div class="filter-matrix-row">
-        <div class="pct-filter-tabs">
-          <span style="font-size: 0.75rem; color: var(--bb-amber); font-weight: 700; margin-right: 0.3rem;">% PRESETS:</span>
-          <button class="pct-btn active" onclick="setPctPreset('ALL', this)">ALL %</button>
-          <button class="pct-btn up" onclick="setPctPreset('+1', this)">+1% ▲</button>
-          <button class="pct-btn up" onclick="setPctPreset('+2', this)">+2% ▲</button>
-          <button class="pct-btn up" onclick="setPctPreset('+3', this)">+3% ▲</button>
-          <button class="pct-btn down" onclick="setPctPreset('-1', this)">-1% ▼</button>
-          <button class="pct-btn down" onclick="setPctPreset('-2', this)">-2% ▼</button>
-          <button class="pct-btn down" onclick="setPctPreset('-3', this)">-3% ▼</button>
+      <!-- Collapsible Body Content -->
+      <div class="filter-matrix-content" id="filterMatrixContent">
+        <!-- Row 1: Search, Segment, Net Change %, and Breakout filters -->
+        <div class="filter-matrix-row">
+          <div class="filter-controls-wrap">
+            <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber);">🔍 SEARCH:</span>
+            <input type="text" id="symbolSearchInput" class="search-input" placeholder="Search by name (e.g. NIFTY, RELIANCE, TCS)..." oninput="applyFilters()">
+            
+            <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">SEGMENT:</span>
+            <select id="filterSegment" class="filter-select" onchange="onSegmentSelect(this.value)">
+              <option value="ALL">All Segments (217+)</option>
+              <option value="INDICES">Indices (IDX_I)</option>
+              <option value="EQUITIES">Equities (NSE_EQ)</option>
+              <option value="MCX">Commodities (MCX)</option>
+            </select>
+
+            <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">NET CHANGE %:</span>
+            <select id="filterNetChange" class="filter-select" onchange="applyFilters()">
+              <option value="ALL">All % Changes</option>
+              <option value="GAINERS">▲ Gainers (> 0%)</option>
+              <option value="LOSERS">▼ Losers (< 0%)</option>
+              <option value="PLUS_1">🚀 +1% or Higher</option>
+              <option value="PLUS_2">🚀 +2% or Higher</option>
+              <option value="PLUS_3">🔥 +3% or Higher</option>
+              <option value="MINUS_1">🔻 -1% or Lower</option>
+              <option value="MINUS_2">🔻 -2% or Lower</option>
+              <option value="MINUS_3">💥 -3% or Lower</option>
+            </select>
+
+            <span style="font-size: 0.78rem; font-weight: 700; color: var(--bb-amber); margin-left: 0.5rem;">PDH BREAKOUT:</span>
+            <select id="filterBreakout" class="filter-select" onchange="applyFilters()">
+              <option value="ALL">All Stocks</option>
+              <option value="BREAKOUTS">🔥 Above PDH (> 0%)</option>
+              <option value="NEAR_BREAKOUT">🎯 Near PDH (Within 1.5%)</option>
+              <option value="NORMAL">Normal / Decaying</option>
+            </select>
+          </div>
         </div>
 
-        <div class="filter-controls-wrap">
-          <span style="font-size: 0.78rem; color: var(--bb-text-muted);">% CHANGE RANGE:</span>
-          <input type="number" id="minPctInput" class="range-input" placeholder="Min %" step="0.1" oninput="applyFilters()">
-          <span style="color: var(--bb-text-muted);">-</span>
-          <input type="number" id="maxPctInput" class="range-input" placeholder="Max %" step="0.1" oninput="applyFilters()">
+        <!-- Row 2: Percentage Presets & Custom % Min/Max Range -->
+        <div class="filter-matrix-row">
+          <div class="pct-filter-tabs">
+            <span style="font-size: 0.75rem; color: var(--bb-amber); font-weight: 700; margin-right: 0.3rem;">% PRESETS:</span>
+            <button class="pct-btn active" onclick="setPctPreset('ALL', this)">ALL %</button>
+            <button class="pct-btn up" onclick="setPctPreset('+1', this)">+1% ▲</button>
+            <button class="pct-btn up" onclick="setPctPreset('+2', this)">+2% ▲</button>
+            <button class="pct-btn up" onclick="setPctPreset('+3', this)">+3% ▲</button>
+            <button class="pct-btn down" onclick="setPctPreset('-1', this)">-1% ▼</button>
+            <button class="pct-btn down" onclick="setPctPreset('-2', this)">-2% ▼</button>
+            <button class="pct-btn down" onclick="setPctPreset('-3', this)">-3% ▼</button>
+          </div>
 
-          <span style="font-size: 0.78rem; color: var(--bb-text-muted); margin-left: 0.5rem;">PRICE RANGE ₹:</span>
-          <input type="number" id="minPriceInput" class="range-input" placeholder="Min ₹" oninput="applyFilters()">
-          <span style="color: var(--bb-text-muted);">-</span>
-          <input type="number" id="maxPriceInput" class="range-input" placeholder="Max ₹" oninput="applyFilters()">
+          <div class="filter-controls-wrap">
+            <span style="font-size: 0.78rem; color: var(--bb-text-muted);">% CHANGE RANGE:</span>
+            <input type="number" id="minPctInput" class="range-input" placeholder="Min %" step="0.1" oninput="applyFilters()">
+            <span style="color: var(--bb-text-muted);">-</span>
+            <input type="number" id="maxPctInput" class="range-input" placeholder="Max %" step="0.1" oninput="applyFilters()">
 
-          <span style="font-size: 0.78rem; color: var(--bb-text-muted); margin-left: 0.5rem;">SORT BY:</span>
-          <select id="sortColumnSelect" class="filter-select" onchange="onSortSelect(this.value)">
-            <option value="index_asc"># (Default Order)</option>
-            <option value="pctChange_desc">Net % Change (Top Gainers ▲)</option>
-            <option value="pctChange_asc">Net % Change (Top Losers ▼)</option>
-            <option value="pdhPctDiff_desc">High vs PDH % (Top Breakouts 🔥)</option>
-            <option value="dayRangePct_desc">Day Range % (Highest Volatility ⚡)</option>
-            <option value="name_asc">Stock Name (A → Z)</option>
-            <option value="name_desc">Stock Name (Z → A)</option>
-            <option value="todayClose_desc">Today Close ₹ (Highest → Lowest)</option>
-            <option value="prevDayHigh_desc">Prev Day High ₹ (Highest → Lowest)</option>
-            <option value="straddlePrice_desc">Straddle LTP ₹ (Highest → Lowest)</option>
-          </select>
+            <span style="font-size: 0.78rem; color: var(--bb-text-muted); margin-left: 0.5rem;">PRICE RANGE ₹:</span>
+            <input type="number" id="minPriceInput" class="range-input" placeholder="Min ₹" oninput="applyFilters()">
+            <span style="color: var(--bb-text-muted);">-</span>
+            <input type="number" id="maxPriceInput" class="range-input" placeholder="Max ₹" oninput="applyFilters()">
+
+            <span style="font-size: 0.78rem; color: var(--bb-text-muted); margin-left: 0.5rem;">SORT BY:</span>
+            <select id="sortColumnSelect" class="filter-select" onchange="onSortSelect(this.value)">
+              <option value="index_asc"># (Default Order)</option>
+              <option value="pctChange_desc">Net % Change (Top Gainers ▲)</option>
+              <option value="pctChange_asc">Net % Change (Top Losers ▼)</option>
+              <option value="pdhPctDiff_desc">High vs PDH % (Top Breakouts 🔥)</option>
+              <option value="dayRangePct_desc">Day Range % (Highest Volatility ⚡)</option>
+              <option value="name_asc">Stock Name (A → Z)</option>
+              <option value="name_desc">Stock Name (Z → A)</option>
+              <option value="todayClose_desc">Today Close ₹ (Highest → Lowest)</option>
+              <option value="prevDayHigh_desc">Prev Day High ₹ (Highest → Lowest)</option>
+              <option value="straddlePrice_desc">Straddle LTP ₹ (Highest → Lowest)</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>
@@ -835,6 +907,41 @@
       applyFilters();
     }
 
+    // Toggle Filter Matrix Collapse/Expand
+    let isFilterCollapsed = false;
+
+    function toggleFilterMatrix(forceState) {
+      const box = document.getElementById('filterMatrixBox');
+      const btnIcon = document.getElementById('filterBtnIcon');
+      const btnText = document.getElementById('filterBtnText');
+      const headerIcon = document.getElementById('filterMatrixToggleIcon');
+      const hint = document.getElementById('filterCollapseHint');
+
+      if (typeof forceState === 'boolean') {
+        isFilterCollapsed = forceState;
+      } else {
+        isFilterCollapsed = !isFilterCollapsed;
+      }
+
+      if (isFilterCollapsed) {
+        box?.classList.add('collapsed');
+        if (btnIcon) btnIcon.textContent = '🔍';
+        if (btnText) btnText.textContent = 'SHOW FILTERS';
+        if (headerIcon) headerIcon.textContent = '▶';
+        if (hint) hint.textContent = '[ CLICK TO EXPAND ]';
+      } else {
+        box?.classList.remove('collapsed');
+        if (btnIcon) btnIcon.textContent = '🔼';
+        if (btnText) btnText.textContent = 'HIDE FILTERS';
+        if (headerIcon) headerIcon.textContent = '▼';
+        if (hint) hint.textContent = '[ CLICK TO HIDE ]';
+      }
+
+      try {
+        localStorage.setItem('verify_filters_collapsed', isFilterCollapsed ? 'true' : 'false');
+      } catch (e) {}
+    }
+
     // Apply All Filters & Sorting
     function applyFilters() {
       const searchVal = (document.getElementById('symbolSearchInput').value || '').toUpperCase().trim();
@@ -845,6 +952,25 @@
       const maxPrice = parseFloat(document.getElementById('maxPriceInput').value) || null;
       const minPct = parseFloat(document.getElementById('minPctInput').value) || null;
       const maxPct = parseFloat(document.getElementById('maxPctInput').value) || null;
+
+      // Active filter count badge
+      let activeCount = 0;
+      if (searchVal) activeCount++;
+      if (segVal !== 'ALL') activeCount++;
+      if (netChangeVal !== 'ALL') activeCount++;
+      if (breakoutVal !== 'ALL') activeCount++;
+      if (minPct !== null || maxPct !== null) activeCount++;
+      if (minPrice !== null || maxPrice !== null) activeCount++;
+
+      const badge = document.getElementById('activeFilterBadge');
+      if (badge) {
+        if (activeCount > 0) {
+          badge.textContent = `${activeCount} Filter${activeCount > 1 ? 's' : ''} Active`;
+          badge.style.display = 'inline-flex';
+        } else {
+          badge.style.display = 'none';
+        }
+      }
 
       filteredDataset = rawDataset.filter(item => {
         // 1. Search filter
@@ -1156,6 +1282,12 @@
     function initApp() {
       const today = new Date().toISOString().split('T')[0];
       document.getElementById('selectedDateInput').value = today;
+      
+      const savedCollapsed = localStorage.getItem('verify_filters_collapsed');
+      if (savedCollapsed === 'true') {
+        toggleFilterMatrix(true);
+      }
+
       loadVerificationData('');
     }
 
