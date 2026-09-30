@@ -483,6 +483,39 @@ async function triggerTestAlert() {
   switchTab('settings');
 }
 
+// Global Batch Sync for All 217+ F&O Instruments
+async function syncAllSymbols() {
+  const btn = document.getElementById('btnSyncAllHeader');
+  const spinIcon = document.getElementById('syncSpinIcon');
+  if (btn) {
+    btn.disabled = true;
+    if (spinIcon) spinIcon.textContent = '⏳';
+    btn.style.opacity = '0.7';
+  }
+
+  showFloatingToast('🔄 Synchronizing all 217+ F&O symbols with Dhan API...');
+
+  try {
+    const res = await fetch('/api/sync-all', { method: 'POST' });
+    const data = await res.json();
+    if (data.status === 'success') {
+      showFloatingToast(`✅ Successfully synced ${data.syncedCount || 217} symbols with Dhan API!`);
+      // Trigger full poll & render
+      await pollStatus();
+    } else {
+      showFloatingToast('⚠️ Sync completed with warnings.');
+    }
+  } catch (err) {
+    showFloatingToast(`❌ Sync failed: ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      if (spinIcon) spinIcon.textContent = '🔄';
+      btn.style.opacity = '1';
+    }
+  }
+}
+
 // Manual On-Demand Sync for Individual Symbol Box
 async function manualSyncSymbol(symName, btnEl) {
   if (!btnEl) btnEl = document.getElementById(`syncbtn-${symName}`);

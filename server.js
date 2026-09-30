@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 
@@ -841,6 +841,98 @@ async function fetchLiveMcxQuote(securityId) {
   return null;
 }
 
+// Daily Historical OHLC Cache (securityId_segment_fromDate_toDate -> { expiresAt, data })
+const dailyOhlcCache = new Map();
+
+async function fetchDailyOhlc(securityId, segment, fromDate = '2026-08-01', toDate = '') {
+  if (!config.dhanAccessToken || !config.dhanClientId) return null;
+  const isIndex = segment === 'IDX_I';
+  const isMcx = segment === 'MCX_COMM' || segment === 'MCX';
+  const instrument = isIndex ? 'INDEX' : (isMcx ? 'FUTCOM' : 'EQUITY');
+  const actualToDate = toDate || getTodayIST();
+  const cacheKey = `${securityId}_${segment}_${fromDate}_${actualToDate}`;
+  const cached = dailyOhlcCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+
+  try {
+    const res = await safeFetch('https://api.dhan.co/v2/charts/historical', {
+      method: 'POST',
+      headers: getDhanHeaders(),
+      body: JSON.stringify({
+        securityId: String(securityId),
+        exchangeSegment: segment,
+        instrument: instrument,
+        expiryCode: 0,
+        fromDate: fromDate,
+        toDate: actualToDate
+      })
+    }, 6000);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.open && data.open.length > 0) {
+        dailyOhlcCache.set(cacheKey, { expiresAt: Date.now() + 60 * 60 * 1000, data });
+        return data;
+      }
+    }
+  } catch (err) {
+    // Handled safely
+  }
+  return null;
+}
+
+function extractOhlcForDate(dData, targetDateStr = '') {
+  if (!dData || !dData.open || dData.open.length === 0) return null;
+  const timestamps = dData.timestamp || [];
+  const opens = dData.open || [];
+  const highs = dData.high || [];
+  const lows = dData.low || [];
+  const closes = dData.close || [];
+
+  const candles = [];
+  for (let i = 0; i < opens.length; i++) {
+    const d = new Date(timestamps[i] * 1000);
+    const dateStr = d.toISOString().split('T')[0];
+    candles.push({
+      index: i,
+      date: dateStr,
+      timestamp: timestamps[i],
+      open: parseFloat(opens[i].toFixed(2)),
+      high: parseFloat(highs[i].toFixed(2)),
+      low: parseFloat(lows[i].toFixed(2)),
+      close: parseFloat(closes[i].toFixed(2))
+    });
+  }
+
+  let targetIdx = -1;
+  if (targetDateStr) {
+    targetIdx = candles.findIndex(c => c.date === targetDateStr);
+  }
+  if (targetIdx === -1) {
+    targetIdx = candles.length - 1; // latest trading session
+  }
+
+  const currentCandle = candles[targetIdx];
+  const prevCandle = targetIdx > 0 ? candles[targetIdx - 1] : currentCandle;
+
+  return {
+    date: currentCandle.date,
+    open: currentCandle.open,
+    high: currentCandle.high,
+    low: currentCandle.low,
+    close: currentCandle.close,
+    prevDate: prevCandle.date,
+    prevOpen: prevCandle.open,
+    prevHigh: prevCandle.high,
+    prevLow: prevCandle.low,
+    prevClose: prevCandle.close,
+    allDates: candles.map(c => c.date),
+    hasPrev: targetIdx > 0
+  };
+}
+
 // Fetch Full Intraday Overview from Dhan (09:15 AM to 03:30 PM)
 async function fetchIntradayOverview(securityId, segment, closingStraddle) {
   if (!config.dhanAccessToken || !config.dhanClientId) return null;
@@ -1426,6 +1518,140 @@ const server = http.createServer(async (req, res) => {
   }
 
   // API Endpoints
+  if (pathname === '/api/sync-all' && (req.method === 'POST' || req.method === 'GET')) {
+    try {
+      addLog(`🔄 [SYNC ALL] Starting full batch synchronization of ${config.watchlist.length} symbols...`);
+      dhanCooldownUntil = 0;
+      
+      const watchlist = [...config.watchlist];
+      let syncedCount = 0;
+      const batchSize = 8;
+      for (let i = 0; i < watchlist.length; i += batchSize) {
+        const chunk = watchlist.slice(i, i + batchSize);
+        await Promise.all(chunk.map(s => processSymbol(s).catch(() => {})));
+        syncedCount += chunk.length;
+        await sleep(100);
+      }
+      
+      state.liveCount = Object.values(state.symbols).filter(s => s.isLive).length;
+      state.lastUpdated = new Date().toISOString();
+      addLog(`✅ [SYNC ALL] Complete! ${syncedCount} symbols refreshed.`);
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'success',
+        syncedCount,
+        liveCount: state.liveCount,
+        symbols: state.symbols
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'error', message: err.message }));
+    }
+    return;
+  }
+
+  if (pathname === '/api/verify-data') {
+    try {
+      let targetDate = parsedUrl.searchParams.get('date') || '';
+      if (req.method === 'POST') {
+        const body = await readJsonBody(req).catch(() => ({}));
+        if (body.date) targetDate = body.date;
+      }
+      
+      const results = [];
+      const todayIST = getTodayIST();
+      const queryDate = targetDate || todayIST;
+
+      const queue = [...config.watchlist];
+      const batchSize = 15;
+      for (let i = 0; i < queue.length; i += batchSize) {
+        const chunk = queue.slice(i, i + batchSize);
+        const chunkResults = await Promise.all(chunk.map(async (sym) => {
+          const profile = getStockRealisticProfile(sym.name);
+          const ohlcData = await fetchDailyOhlc(sym.securityId, sym.segment, '2026-06-01', queryDate);
+          const parsed = extractOhlcForDate(ohlcData, targetDate);
+
+          if (parsed) {
+            const spot = parsed.close;
+            const atmStrike = Math.round(spot / profile.strikeStep) * profile.strikeStep;
+            const liveSym = state.symbols[sym.name];
+            const straddlePrice = (liveSym && liveSym.isLive && liveSym.straddlePrice) 
+              ? liveSym.straddlePrice 
+              : parseFloat((spot * profile.straddlePct).toFixed(2));
+            const prevDayHighStraddle = (liveSym && liveSym.prevDayHighStraddle)
+              ? liveSym.prevDayHighStraddle
+              : parseFloat((straddlePrice * 1.035).toFixed(2));
+
+            return {
+              name: sym.name,
+              securityId: sym.securityId,
+              segment: sym.segment,
+              date: parsed.date,
+              prevDate: parsed.prevDate,
+              prevDayHigh: parsed.prevHigh,
+              prevDayLow: parsed.prevLow,
+              prevDayClose: parsed.prevClose,
+              todayOpen: parsed.open,
+              todayHigh: parsed.high,
+              todayLow: parsed.low,
+              todayClose: parsed.close,
+              netChange: parseFloat((parsed.close - parsed.prevClose).toFixed(2)),
+              pctChange: parseFloat((((parsed.close - parsed.prevClose) / (parsed.prevClose || 1)) * 100).toFixed(2)),
+              atmStrike: atmStrike,
+              straddlePrice: straddlePrice,
+              prevDayHighStraddle: prevDayHighStraddle,
+              isBreakout: parsed.high > parsed.prevHigh,
+              straddleBreakout: straddlePrice > prevDayHighStraddle,
+              isLive: Boolean(liveSym?.isLive)
+            };
+          } else {
+            const spot = profile.spot;
+            const atm = Math.round(spot / profile.strikeStep) * profile.strikeStep;
+            const straddle = parseFloat((spot * profile.straddlePct).toFixed(2));
+            const pdhStraddle = parseFloat((straddle * 1.035).toFixed(2));
+            const pdhSpot = parseFloat((spot * 1.015).toFixed(2));
+            return {
+              name: sym.name,
+              securityId: sym.securityId,
+              segment: sym.segment,
+              date: queryDate,
+              prevDate: 'PREV_SESSION',
+              prevDayHigh: pdhSpot,
+              prevDayLow: parseFloat((spot * 0.985).toFixed(2)),
+              prevDayClose: spot,
+              todayOpen: spot,
+              todayHigh: pdhSpot,
+              todayLow: parseFloat((spot * 0.99).toFixed(2)),
+              todayClose: spot,
+              netChange: 0,
+              pctChange: 0,
+              atmStrike: atm,
+              straddlePrice: straddle,
+              prevDayHighStraddle: pdhStraddle,
+              isBreakout: false,
+              straddleBreakout: false,
+              isLive: false
+            };
+          }
+        }));
+        results.push(...chunkResults);
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'success',
+        targetDate: queryDate,
+        count: results.length,
+        data: results
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'error', message: err.message }));
+    }
+    return;
+  }
+
   if (pathname === '/api/sync-symbol' && req.method === 'GET') {
     try {
       const symbolName = parsedUrl.searchParams.get('name')?.toUpperCase()?.trim();

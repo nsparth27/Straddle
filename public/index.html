@@ -48,6 +48,9 @@
       <span>DHAN STRADDLE PRO — ALL 230+ NSE F&amp;O STOCKS &amp; INDICES</span>
     </div>
     <div class="bb-status-bar">
+      <button class="action-btn sync-all-header-btn" id="btnSyncAllHeader" onclick="syncAllSymbols()" title="Synchronize all symbols with Dhan API" style="background: rgba(255, 176, 0, 0.15); border: 1px solid var(--bb-amber); color: var(--bb-amber); padding: 0.35rem 0.85rem; border-radius: 4px; font-weight: 800; cursor: pointer; font-size: 0.78rem; font-family: var(--bb-font); display: inline-flex; align-items: center; gap: 0.4rem; transition: all 0.2s;">
+        <span id="syncSpinIcon">🔄</span> SYNC ALL
+      </button>
       <div class="status-indicator">
         <div class="dot" id="marketDot"></div>
         <span id="marketStatusText">MARKET OPEN</span>
@@ -96,6 +99,9 @@
     <button class="tab-btn" onclick="switchTab('charts')" id="tabBtnCharts">
       <span class="key-code">[ F5 ]</span> 📊 QUANT STRATEGY CHARTS &amp; MULTI-RULE SUITE
     </button>
+    <a href="verify.html" class="tab-btn" style="text-decoration: none;" id="tabBtnVerify">
+      <span class="key-code">[ F6 ]</span> 📋 DATA VERIFIER &amp; HISTORICAL CSV
+    </a>
   </nav>
 
   <!-- Main Workspace -->

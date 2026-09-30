@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Verification & Historical OHLC Inspector — Dhan Straddle Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .verify-container {
+      max-width: 1700px;
+      margin: 0 auto;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      width: 100%;
+    }
+
+    /* Control Toolbar */
+    .verify-toolbar {
+      background: var(--bb-panel);
+      border: 1px solid var(--bb-panel-border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--bb-amber);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .date-input-wrap {
+      display: flex;
+      align-items: center;
+      background: var(--bb-input-bg);
+      border: 1px solid var(--bb-panel-border);
+      border-radius: 4px;
+      padding: 0.35rem 0.6rem;
+      color: var(--bb-text-main);
+    }
+
+    .date-input-wrap input[type="date"] {
+      background: transparent;
+      border: none;
+      color: var(--bb-cyan);
+      font-family: var(--bb-font);
+      font-size: 0.9rem;
+      font-weight: 700;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .date-input-wrap input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+      cursor: pointer;
+    }
+
+    .quick-date-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--bb-panel-border);
+      color: var(--bb-text-main);
+      padding: 0.35rem 0.65rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-family: var(--bb-font);
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .quick-date-btn:hover {
+      background: rgba(255, 176, 0, 0.15);
+      border-color: var(--bb-amber);
+      color: var(--bb-amber);
+    }
+
+    .quick-date-btn.active {
+      background: var(--bb-amber);
+      color: #000;
+      border-color: var(--bb-amber);
+    }
+
+    .action-btn {
+      background: rgba(0, 229, 255, 0.1);
+      border: 1px solid var(--bb-cyan);
+      color: var(--bb-cyan);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      font-family: var(--bb-font);
+      font-weight: 800;
+      font-size: 0.8rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+    }
+
+    .action-btn:hover {
+      background: var(--bb-cyan);
+      color: #000;
+      box-shadow: 0 0 12px var(--bb-cyan-glow);
+    }
+
+    .action-btn.export-btn {
+      background: rgba(0, 230, 118, 0.15);
+      border-color: var(--bb-green);
+      color: var(--bb-green);
+    }
+
+    .action-btn.export-btn:hover {
+      background: var(--bb-green);
+      color: #000;
+      box-shadow: 0 0 12px var(--bb-green-glow);
+    }
+
+    .action-btn.sync-all-header-btn {
+      background: rgba(255, 176, 0, 0.15);
+      border-color: var(--bb-amber);
+      color: var(--bb-amber);
+    }
+
+    .action-btn.sync-all-header-btn:hover {
+      background: var(--bb-amber);
+      color: #000;
+      box-shadow: 0 0 12px var(--bb-amber-glow);
+    }
+
+    /* KPI Summary Cards */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .kpi-card {
+      background: var(--bb-panel);
+      border: 1px solid var(--bb-panel-border);
+      border-radius: 6px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .kpi-title {
+      font-size: 0.72rem;
+      color: var(--bb-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .kpi-value {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--bb-text-main);
+    }
+
+    .kpi-sub {
+      font-size: 0.75rem;
+      color: var(--bb-cyan);
+    }
+
+    /* Search & Filter Bar */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .search-input {
+      background: var(--bb-input-bg);
+      border: 1px solid var(--bb-panel-border);
+      color: #FFF;
+      font-family: var(--bb-font);
+      font-size: 0.85rem;
+      padding: 0.5rem 0.8rem;
+      border-radius: 4px;
+      min-width: 280px;
+      outline: none;
+    }
+
+    .search-input:focus {
+      border-color: var(--bb-amber);
+    }
+
+    .segment-filter-tabs {
+      display: flex;
+      gap: 0.4rem;
+    }
+
+    .seg-btn {
+      background: var(--bb-panel);
+      border: 1px solid var(--bb-panel-border);
+      color: var(--bb-text-muted);
+      font-family: var(--bb-font);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.35rem 0.7rem;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .seg-btn.active, .seg-btn:hover {
+      background: rgba(255, 176, 0, 0.15);
+      border-color: var(--bb-amber);
+      color: var(--bb-amber);
+    }
+
+    /* Data Table */
+    .table-wrapper {
+      background: var(--bb-panel);
+      border: 1px solid var(--bb-panel-border);
+      border-radius: 8px;
+      overflow-x: auto;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .verify-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      text-align: right;
+    }
+
+    .verify-table th {
+      background: #181C26;
+      color: var(--bb-amber);
+      padding: 0.75rem 0.85rem;
+      font-weight: 800;
+      border-bottom: 2px solid var(--bb-panel-border);
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .verify-table th.text-left, .verify-table td.text-left {
+      text-align: left;
+    }
+
+    .verify-table th.text-center, .verify-table td.text-center {
+      text-align: center;
+    }
+
+    .verify-table td {
+      padding: 0.65rem 0.85rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      white-space: nowrap;
+    }
+
+    .verify-table tr:hover td {
+      background: rgba(255, 176, 0, 0.05);
+    }
+
+    .badge-breakout {
+      background: rgba(255, 61, 0, 0.2);
+      border: 1px solid var(--bb-red);
+      color: var(--bb-red);
+      padding: 0.15rem 0.45rem;
+      border-radius: 3px;
+      font-weight: 800;
+      font-size: 0.72rem;
+      display: inline-block;
+    }
+
+    .badge-normal {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--bb-text-muted);
+      padding: 0.15rem 0.45rem;
+      border-radius: 3px;
+      font-size: 0.72rem;
+      display: inline-block;
+    }
+
+    .val-up {
+      color: var(--bb-green);
+      font-weight: 700;
+    }
+
+    .val-down {
+      color: var(--bb-red);
+      font-weight: 700;
+    }
+
+    .val-highlight {
+      color: var(--bb-cyan);
+      font-weight: 700;
+    }
+
+    .val-amber {
+      color: var(--bb-amber);
+      font-weight: 700;
+    }
+
+    /* Toast Notification */
+    .toast-msg {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--bb-panel);
+      border: 1px solid var(--bb-amber);
+      color: #FFF;
+      padding: 0.85rem 1.25rem;
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.8);
+      font-family: var(--bb-font);
+      font-size: 0.85rem;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 🔒 SECURITY PIN LOCK MODAL -->
+  <div id="pinLockModal" class="pin-modal-overlay">
+    <div class="pin-card">
+      <div class="pin-badge" id="pinBadge">🔒 SECURITY LEVEL 1</div>
+      <div class="pin-header">
+        <span class="tag">BLOOMBERG AUTH</span>
+        <h2>ENTER ACCESS PIN</h2>
+      </div>
+      <p class="pin-desc" id="pinDesc">Enter the 4-digit security PIN to unlock verification data &amp; export tools.</p>
+      
+      <div class="pin-input-container" id="pinInputContainer">
+        <input type="password" id="pinInput" maxlength="4" placeholder="••••" autocomplete="off" autofocus inputmode="numeric" onkeydown="if(event.key==='Enter') verifyPin()" />
+        <button class="pin-submit-btn" id="pinSubmitBtn" onclick="verifyPin()">UNLOCK [ ↵ ]</button>
+      </div>
+      <div id="pinError" class="pin-error-msg"></div>
+    </div>
+  </div>
+
+  <!-- Bloomberg Header -->
+  <header class="bb-header">
+    <div class="bb-title">
+      <span class="tag">BLOOMBERG</span>
+      <span>DHAN STRADDLE PRO — DATA VERIFICATION &amp; HISTORICAL OHLC AUDITOR</span>
+    </div>
+    <div class="bb-status-bar">
+      <button class="action-btn sync-all-header-btn" id="btnSyncAllHeader" onclick="syncAllFromHeader()">
+        <span id="syncSpinIcon">🔄</span> SYNC ALL
+      </button>
+      <div class="status-indicator">
+        <div class="dot" id="marketDot"></div>
+        <span id="marketStatusText">AUTHENTIC DHAN DATA</span>
+      </div>
+      <div style="color: var(--bb-cyan); font-weight: 700;" id="clockIST">00:00:00 IST</div>
+      <button class="lock-btn" onclick="lockTerminal()" title="Lock Terminal Session" style="background: rgba(255, 176, 0, 0.15); border: 1px solid var(--bb-amber); color: var(--bb-amber); padding: 0.25rem 0.6rem; border-radius: 4px; font-weight: 800; cursor: pointer; font-size: 0.75rem;">🔒 LOCK</button>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="tab-navigation">
+    <a href="index.html" class="tab-btn" style="text-decoration: none;">
+      <span class="key-code">[ F1 ]</span> LIVE DASHBOARD (TERMINAL)
+    </a>
+    <a href="charts.html" class="tab-btn" style="text-decoration: none;">
+      <span class="key-code">[ F5 ]</span> 📊 QUANT STRATEGY CHARTS
+    </a>
+    <a href="verify.html" class="tab-btn active" style="text-decoration: none;">
+      <span class="key-code">[ F6 ]</span> 📋 DATA VERIFIER &amp; HISTORICAL CSV
+    </a>
+  </nav>
+
+  <div class="verify-container">
+
+    <!-- Top Toolbar: Date Picker & Quick Actions -->
+    <div class="verify-toolbar">
+      <div class="toolbar-group">
+        <span class="toolbar-label">📅 SELECT TRADING DATE:</span>
+        <div class="date-input-wrap">
+          <input type="date" id="selectedDateInput" onchange="onDateChanged(this.value)">
+        </div>
+        <button class="quick-date-btn active" id="btnLatest" onclick="setQuickDate('latest')">LATEST SESSION</button>
+        <button class="quick-date-btn" id="btnPrevDay" onclick="setQuickDate('prev')">PREV SESSION</button>
+        <button class="quick-date-btn" id="btn3Days" onclick="setQuickDate('3days')">3 DAYS AGO</button>
+        <button class="quick-date-btn" id="btn1Week" onclick="setQuickDate('1week')">1 WEEK AGO</button>
+      </div>
+
+      <div class="toolbar-group">
+        <button class="action-btn" onclick="loadVerificationData(currentDate)">
+          <span>🔄</span> REFRESH DATA
+        </button>
+        <button class="action-btn export-btn" onclick="exportToCsv()">
+          <span>📥</span> EXPORT FULL CSV
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI Summary Grid -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-title">TOTAL INSTRUMENTS</div>
+        <div class="kpi-value val-amber" id="kpiTotalCount">0</div>
+        <div class="kpi-sub">F&O Equities &amp; Indices</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">SELECTED DATE</div>
+        <div class="kpi-value val-highlight" id="kpiTargetDate">--</div>
+        <div class="kpi-sub" id="kpiPrevDateLabel">Prev Date: --</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">ACTIVE BREAKOUTS (PDH)</div>
+        <div class="kpi-value val-down" id="kpiBreakoutCount">0</div>
+        <div class="kpi-sub">Today High &gt; Prev Day High</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">MARKET BREADTH</div>
+        <div class="kpi-value" id="kpiBreadth">
+          <span class="val-up" id="kpiAdvances">0</span> / <span class="val-down" id="kpiDeclines">0</span>
+        </div>
+        <div class="kpi-sub">Advances / Declines</div>
+      </div>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div class="filter-bar">
+      <input type="text" id="symbolSearchInput" class="search-input" placeholder="🔍 Search by stock name (e.g. NIFTY, RELIANCE, TCS)..." oninput="applyFilters()">
+      
+      <div class="segment-filter-tabs">
+        <button class="seg-btn active" onclick="setSegmentFilter('ALL', this)">ALL (217+)</button>
+        <button class="seg-btn" onclick="setSegmentFilter('INDICES', this)">INDICES</button>
+        <button class="seg-btn" onclick="setSegmentFilter('EQUITIES', this)">EQUITIES</button>
+        <button class="seg-btn" onclick="setSegmentFilter('MCX', this)">COMMODITIES</button>
+        <button class="seg-btn" onclick="setSegmentFilter('BREAKOUTS', this)">🔥 BREAKOUTS ONLY</button>
+      </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="table-wrapper">
+      <table class="verify-table">
+        <thead>
+          <tr>
+            <th class="text-center">#</th>
+            <th class="text-left">STOCK / INSTRUMENT</th>
+            <th class="text-center">SEGMENT</th>
+            <th class="text-center">DATE</th>
+            <th>PREV DAY HIGH (PDH) ₹</th>
+            <th>PREV DAY CLOSE ₹</th>
+            <th>TODAY OPEN ₹</th>
+            <th>TODAY HIGH ₹</th>
+            <th>TODAY LOW ₹</th>
+            <th>TODAY CLOSE / LTP ₹</th>
+            <th>NET CHANGE (%)</th>
+            <th class="text-center">ATM STRIKE</th>
+            <th>STRADDLE LTP ₹</th>
+            <th>STRADDLE PDH ₹</th>
+            <th class="text-center">BREAKOUT STATUS</th>
+            <th class="text-center">ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody id="verifyTableBody">
+          <tr>
+            <td colspan="16" style="text-align: center; padding: 2.5rem; color: var(--bb-text-muted);">
+              🔄 Loading authentic historical and live data from Dhan API...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toastMsg" class="toast-msg"></div>
+
+  <script>
+    // State Variables
+    let rawDataset = [];
+    let filteredDataset = [];
+    let currentDate = '';
+    let currentSegment = 'ALL';
+    const TERMINAL_PIN = '2712';
+    const PIN_KEY = 'dhan_terminal_token';
+
+    // PIN Authentication
+    function checkAuth() {
+      const token = localStorage.getItem(PIN_KEY);
+      if (token) {
+        document.getElementById('pinLockModal').style.display = 'none';
+        return true;
+      }
+      document.getElementById('pinLockModal').style.display = 'flex';
+      setTimeout(() => { const el = document.getElementById('pinInput'); if (el) el.focus(); }, 100);
+      return false;
+    }
+
+    async function verifyPin() {
+      const pin = document.getElementById('pinInput').value.trim();
+      const errEl = document.getElementById('pinError');
+      errEl.textContent = '';
+      
+      try {
+        const res = await fetch('/api/verify-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          localStorage.setItem(PIN_KEY, data.token || 'auth_ok');
+          document.getElementById('pinLockModal').style.display = 'none';
+          initApp();
+        } else {
+          errEl.textContent = data.message || 'Invalid PIN.';
+          document.getElementById('pinInput').value = '';
+        }
+      } catch (err) {
+        if (pin === TERMINAL_PIN) {
+          localStorage.setItem(PIN_KEY, 'auth_ok');
+          document.getElementById('pinLockModal').style.display = 'none';
+          initApp();
+        } else {
+          errEl.textContent = 'Invalid PIN.';
+        }
+      }
+    }
+
+    function lockTerminal() {
+      localStorage.removeItem(PIN_KEY);
+      document.getElementById('pinLockModal').style.display = 'flex';
+      document.getElementById('pinInput').value = '';
+    }
+
+    // IST Clock
+    function updateClock() {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false });
+      document.getElementById('clockIST').textContent = `${timeStr} IST`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Show Toast
+    function showToast(msg, duration = 3000) {
+      const toast = document.getElementById('toastMsg');
+      toast.innerHTML = msg;
+      toast.style.display = 'flex';
+      setTimeout(() => { toast.style.display = 'none'; }, duration);
+    }
+
+    // Load Verification Data from Backend
+    async function loadVerificationData(targetDate = '') {
+      const tbody = document.getElementById('verifyTableBody');
+      tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 2.5rem; color: var(--bb-amber);">🔄 Querying Dhan API historical daily OHLC for date: <b>${targetDate || 'Latest'}</b>...</td></tr>`;
+
+      try {
+        const url = targetDate ? `/api/verify-data?date=${encodeURIComponent(targetDate)}` : '/api/verify-data';
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        if (json.status === 'success' && Array.isArray(json.data)) {
+          rawDataset = json.data;
+          currentDate = json.targetDate || targetDate;
+          
+          document.getElementById('selectedDateInput').value = currentDate;
+          document.getElementById('kpiTargetDate').textContent = currentDate;
+          if (rawDataset.length > 0 && rawDataset[0].prevDate) {
+            document.getElementById('kpiPrevDateLabel').textContent = `Prev Date: ${rawDataset[0].prevDate}`;
+          }
+
+          applyFilters();
+          updateKpis();
+          showToast(`✅ Loaded ${rawDataset.length} instruments for ${currentDate}`);
+        } else {
+          tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 2.5rem; color: var(--bb-red);">❌ Could not load verification data.</td></tr>`;
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 2.5rem; color: var(--bb-red);">❌ Error connecting to server: ${err.message}</td></tr>`;
+      }
+    }
+
+    // Format currency
+    function fmtNum(num, dec = 2) {
+      if (num == null || isNaN(num)) return '--';
+      return Number(num).toLocaleString('en-IN', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    }
+
+    // Apply Filters & Search
+    function applyFilters() {
+      const query = (document.getElementById('symbolSearchInput').value || '').toUpperCase().trim();
+
+      filteredDataset = rawDataset.filter(item => {
+        // Search filter
+        if (query && !item.name.includes(query)) return false;
+
+        // Segment filter
+        if (currentSegment === 'INDICES') return item.segment === 'IDX_I';
+        if (currentSegment === 'EQUITIES') return item.segment === 'NSE_EQ';
+        if (currentSegment === 'MCX') return item.segment === 'MCX_COMM' || ['CRUDEOIL', 'GOLD', 'SILVER', 'NATURALGAS', 'COPPER'].includes(item.name);
+        if (currentSegment === 'BREAKOUTS') return item.isBreakout;
+
+        return true;
+      });
+
+      renderTable();
+    }
+
+    // Render Table
+    function renderTable() {
+      const tbody = document.getElementById('verifyTableBody');
+      if (filteredDataset.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 2.5rem; color: var(--bb-text-muted);">No symbols matching filter criteria.</td></tr>`;
+        return;
+      }
+
+      let html = '';
+      filteredDataset.forEach((row, idx) => {
+        const isUp = row.netChange >= 0;
+        const changeClass = isUp ? 'val-up' : 'val-down';
+        const changeSign = isUp ? '+' : '';
+        const breakoutBadge = row.isBreakout 
+          ? `<span class="badge-breakout">🔥 PDH BREAKOUT</span>` 
+          : `<span class="badge-normal">NORMAL</span>`;
+
+        html += `
+          <tr>
+            <td class="text-center" style="color: var(--bb-text-muted);">${idx + 1}</td>
+            <td class="text-left" style="font-weight: 800; color: var(--bb-amber);">
+              <a href="index.html" style="color: inherit; text-decoration: none;" title="View in Terminal">${row.name}</a>
+            </td>
+            <td class="text-center" style="color: var(--bb-text-muted); font-size: 0.75rem;">${row.segment}</td>
+            <td class="text-center" style="color: var(--bb-cyan); font-size: 0.75rem;">${row.date}</td>
+            <td class="val-amber">₹${fmtNum(row.prevDayHigh)}</td>
+            <td style="color: var(--bb-text-muted);">₹${fmtNum(row.prevDayClose)}</td>
+            <td style="color: var(--bb-text-main);">₹${fmtNum(row.todayOpen)}</td>
+            <td class="${row.todayHigh > row.prevDayHigh ? 'val-down' : 'val-up'}">₹${fmtNum(row.todayHigh)}</td>
+            <td style="color: var(--bb-text-main);">₹${fmtNum(row.todayLow)}</td>
+            <td style="font-weight: 800; color: #FFF;">₹${fmtNum(row.todayClose)}</td>
+            <td class="${changeClass}">
+              ${changeSign}${fmtNum(row.netChange)} (${changeSign}${fmtNum(row.pctChange)}%)
+            </td>
+            <td class="text-center val-highlight">${row.atmStrike ?? '--'}</td>
+            <td class="val-highlight">₹${fmtNum(row.straddlePrice)}</td>
+            <td style="color: var(--bb-text-muted);">₹${fmtNum(row.prevDayHighStraddle)}</td>
+            <td class="text-center">${breakoutBadge}</td>
+            <td class="text-center">
+              <a href="charts.html?symbol=${encodeURIComponent(row.name)}" class="action-btn" style="padding: 0.2rem 0.5rem; font-size: 0.7rem; text-decoration: none;">
+                📊 CHART
+              </a>
+            </td>
+          </tr>
+        `;
+      });
+
+      tbody.innerHTML = html;
+    }
+
+    // Update KPI counters
+    function updateKpis() {
+      document.getElementById('kpiTotalCount').textContent = rawDataset.length;
+      const breakouts = rawDataset.filter(r => r.isBreakout).length;
+      document.getElementById('kpiBreakoutCount').textContent = breakouts;
+
+      const advances = rawDataset.filter(r => r.netChange > 0).length;
+      const declines = rawDataset.filter(r => r.netChange < 0).length;
+      document.getElementById('kpiAdvances').textContent = `${advances} ▲`;
+      document.getElementById('kpiDeclines').textContent = `${declines} ▼`;
+    }
+
+    // Quick Date Helpers
+    function setQuickDate(type) {
+      document.querySelectorAll('.quick-date-btn').forEach(b => b.classList.remove('active'));
+      
+      const now = new Date();
+      let target = new Date();
+
+      if (type === 'latest') {
+        document.getElementById('btnLatest').classList.add('active');
+        loadVerificationData('');
+        return;
+      } else if (type === 'prev') {
+        document.getElementById('btnPrevDay').classList.add('active');
+        target.setDate(now.getDate() - 1);
+      } else if (type === '3days') {
+        document.getElementById('btn3Days').classList.add('active');
+        target.setDate(now.getDate() - 3);
+      } else if (type === '1week') {
+        document.getElementById('btn1Week').classList.add('active');
+        target.setDate(now.getDate() - 7);
+      }
+
+      const yyyy = target.getFullYear();
+      const mm = String(target.getMonth() + 1).padStart(2, '0');
+      const dd = String(target.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      document.getElementById('selectedDateInput').value = dateStr;
+      loadVerificationData(dateStr);
+    }
+
+    function onDateChanged(val) {
+      document.querySelectorAll('.quick-date-btn').forEach(b => b.classList.remove('active'));
+      if (val) loadVerificationData(val);
+    }
+
+    function setSegmentFilter(seg, btn) {
+      currentSegment = seg;
+      document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyFilters();
+    }
+
+    // Sync All from Header
+    async function syncAllFromHeader() {
+      const btn = document.getElementById('btnSyncAllHeader');
+      const icon = document.getElementById('syncSpinIcon');
+      btn.disabled = true;
+      icon.textContent = '⏳';
+      showToast('🔄 Synchronizing all 217 symbols with Dhan API...');
+
+      try {
+        const res = await fetch('/api/sync-all', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'success') {
+          showToast(`✅ Synced ${data.syncedCount} symbols successfully!`);
+          await loadVerificationData(currentDate);
+        } else {
+          showToast('⚠️ Sync completed with warnings.');
+        }
+      } catch (err) {
+        showToast(`❌ Sync failed: ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        icon.textContent = '🔄';
+      }
+    }
+
+    // 📥 Export Data to RFC4180 CSV
+    function exportToCsv() {
+      if (filteredDataset.length === 0) {
+        showToast('⚠️ No data available to export.');
+        return;
+      }
+
+      const headers = [
+        '#',
+        'Stock / Instrument',
+        'Segment',
+        'Date',
+        'Prev Date',
+        'Prev Day High (PDH) INR',
+        'Prev Day Close INR',
+        'Today Open INR',
+        'Today High INR',
+        'Today Low INR',
+        'Today Close / LTP INR',
+        'Net Change INR',
+        'Net Change Pct',
+        'ATM Strike',
+        'Straddle LTP INR',
+        'Straddle PDH INR',
+        'Breakout Status'
+      ];
+
+      const rows = filteredDataset.map((r, i) => [
+        i + 1,
+        `"${r.name}"`,
+        `"${r.segment}"`,
+        `"${r.date}"`,
+        `"${r.prevDate || ''}"`,
+        r.prevDayHigh ?? '',
+        r.prevDayClose ?? '',
+        r.todayOpen ?? '',
+        r.todayHigh ?? '',
+        r.todayLow ?? '',
+        r.todayClose ?? '',
+        r.netChange ?? '',
+        `${r.pctChange ?? 0}%`,
+        r.atmStrike ?? '',
+        r.straddlePrice ?? '',
+        r.prevDayHighStraddle ?? '',
+        r.isBreakout ? 'PDH BREAKOUT' : 'NORMAL'
+      ]);
+
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const fileDate = currentDate || new Date().toISOString().split('T')[0];
+      a.download = `Dhan_Straddle_Verification_${fileDate}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast(`📥 Exported ${filteredDataset.length} rows to CSV!`);
+    }
+
+    // Initialize App
+    function initApp() {
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('selectedDateInput').value = today;
+      loadVerificationData('');
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      if (checkAuth()) {
+        initApp();
+      }
+    });
+  </script>
+</body>
+</html>
