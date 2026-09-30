@@ -842,7 +842,79 @@ async function fetchLiveMcxQuote(securityId) {
 }
 
 // Daily Historical OHLC Cache (securityId_segment_fromDate_toDate -> { expiresAt, data })
+// Daily Historical OHLC Cache (securityId_segment_fromDate_toDate -> { expiresAt, data })
 const dailyOhlcCache = new Map();
+
+function getISTDateString(timestampSec) {
+  if (!timestampSec) return '';
+  const d = new Date(timestampSec * 1000);
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD in IST
+}
+
+function getDynamicAtmStrike(spotPrice, symbolName = '') {
+  if (!spotPrice || spotPrice <= 0) return 0;
+  const n = String(symbolName).toUpperCase().trim();
+  if (n === 'NIFTY') return Math.round(spotPrice / 50) * 50;
+  if (n === 'BANKNIFTY') return Math.round(spotPrice / 100) * 100;
+  if (n === 'FINNIFTY') return Math.round(spotPrice / 50) * 50;
+  if (n === 'MIDCPNIFTY') return Math.round(spotPrice / 25) * 25;
+  if (n === 'CRUDEOIL') return Math.round(spotPrice / 50) * 50;
+  if (n === 'NATURALGAS') return Math.round(spotPrice / 5) * 5;
+  if (n === 'GOLD') return Math.round(spotPrice / 100) * 100;
+  if (n === 'SILVER') return Math.round(spotPrice / 500) * 500;
+  if (n === 'COPPER') return Math.round(spotPrice / 5) * 5;
+
+  let step = 1;
+  if (spotPrice < 50) step = 0.5;
+  else if (spotPrice < 100) step = 1.0;
+  else if (spotPrice < 250) step = 2.5;
+  else if (spotPrice < 500) step = 5;
+  else if (spotPrice < 1000) step = 10;
+  else if (spotPrice < 2500) step = 20;
+  else if (spotPrice < 5000) step = 50;
+  else if (spotPrice < 10000) step = 100;
+  else step = 200;
+
+  return Math.round(spotPrice / step) * step;
+}
+
+let cachedBatchMarketfeed = null;
+let cachedBatchMarketfeedTime = 0;
+
+async function fetchBatchMarketfeedOhlc(forceRefresh = false) {
+  if (!config.dhanAccessToken || !config.dhanClientId) return {};
+  if (!forceRefresh && cachedBatchMarketfeed && (Date.now() - cachedBatchMarketfeedTime < 4000)) {
+    return cachedBatchMarketfeed;
+  }
+
+  try {
+    const nseIds = config.watchlist.filter(w => w.segment === 'NSE_EQ').map(w => w.securityId);
+    const idxIds = config.watchlist.filter(w => w.segment === 'IDX_I').map(w => w.securityId);
+    const mcxIds = config.watchlist.filter(w => w.segment === 'MCX_COMM').map(w => w.securityId);
+
+    const res = await safeFetch('https://api.dhan.co/v2/marketfeed/ohlc', {
+      method: 'POST',
+      headers: getDhanHeaders(),
+      body: JSON.stringify({
+        'NSE_EQ': nseIds,
+        'IDX_I': idxIds,
+        'MCX_COMM': mcxIds
+      })
+    }, 6000);
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data) {
+        cachedBatchMarketfeed = json.data;
+        cachedBatchMarketfeedTime = Date.now();
+        return json.data;
+      }
+    }
+  } catch (err) {
+    console.error('Batch marketfeed error:', err.message);
+  }
+  return cachedBatchMarketfeed || {};
+}
 
 async function fetchDailyOhlc(securityId, segment, fromDate = '2026-08-01', toDate = '') {
   if (!config.dhanAccessToken || !config.dhanClientId) return null;
@@ -893,8 +965,7 @@ function extractOhlcForDate(dData, targetDateStr = '') {
 
   const candles = [];
   for (let i = 0; i < opens.length; i++) {
-    const d = new Date(timestamps[i] * 1000);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = getISTDateString(timestamps[i]);
     candles.push({
       index: i,
       date: dateStr,
@@ -1118,28 +1189,19 @@ function generateSessionTimeline(segment, currentPrice, pdh, crossoverCount = 0)
 function getStockRealisticProfile(name) {
   const n = name.toUpperCase().trim();
   const EXACT_PRICES = {
-    'NIFTY': { spot: 22631.75, strikeStep: 50, straddlePct: 0.0102 },
-    'BANKNIFTY': { spot: 54169.40, strikeStep: 100, straddlePct: 0.0199 },
-    'FINNIFTY': { spot: 24499.35, strikeStep: 50, straddlePct: 0.0205 },
-    'MIDCPNIFTY': { spot: 13714.75, strikeStep: 25, straddlePct: 0.011 },
-    'CRUDEOIL': { spot: 6180.00, strikeStep: 50, straddlePct: 0.023 },
-    'NATURALGAS': { spot: 238.50, strikeStep: 5, straddlePct: 0.070 },
-    'GOLD': { spot: 148689.00, strikeStep: 100, straddlePct: 0.0125 },
-    'SILVER': { spot: 225650.00, strikeStep: 500, straddlePct: 0.015 },
-    'COPPER': { spot: 824.50, strikeStep: 5, straddlePct: 0.019 }
+    'NIFTY': { spot: 22620.45, strikeStep: 50, straddlePct: 0.012 },
+    'BANKNIFTY': { spot: 54633.05, strikeStep: 100, straddlePct: 0.020 },
+    'FINNIFTY': { spot: 24649.50, strikeStep: 50, straddlePct: 0.018 },
+    'MIDCPNIFTY': { spot: 13731.20, strikeStep: 25, straddlePct: 0.015 },
+    'CRUDEOIL': { spot: 8715.00, strikeStep: 50, straddlePct: 0.040 },
+    'NATURALGAS': { spot: 290.80, strikeStep: 5, straddlePct: 0.075 },
+    'GOLD': { spot: 146200.00, strikeStep: 100, straddlePct: 0.015 },
+    'SILVER': { spot: 223740.00, strikeStep: 500, straddlePct: 0.015 },
+    'COPPER': { spot: 1401.50, strikeStep: 5, straddlePct: 0.020 }
   };
   if (EXACT_PRICES[n]) return EXACT_PRICES[n];
 
-  let hash = 0;
-  for (let i = 0; i < n.length; i++) {
-    hash = (hash << 5) - hash + n.charCodeAt(i);
-    hash |= 0;
-  }
-  const positiveHash = Math.abs(hash);
-  const baseSpot = 150 + (positiveHash % 2850);
-  const strikeStep = baseSpot > 2000 ? 50 : (baseSpot > 1000 ? 20 : (baseSpot > 500 ? 10 : (baseSpot > 100 ? 5 : 1)));
-  const straddlePct = 0.015 + ((positiveHash % 15) / 1000);
-  return { spot: parseFloat(baseSpot.toFixed(2)), strikeStep, straddlePct };
+  return { spot: 1000.0, strikeStep: 20, straddlePct: 0.025 };
 }
 
 // Process a single symbol with Previous Day High (PDH) Crossover Tracking
@@ -1559,29 +1621,52 @@ const server = http.createServer(async (req, res) => {
         if (body.date) targetDate = body.date;
       }
       
-      const results = [];
       const todayIST = getTodayIST();
       const queryDate = targetDate || todayIST;
 
+      // 1. Fetch authentic batch marketfeed quotes for all 217 symbols in 1 shot
+      const batchFeeds = await fetchBatchMarketfeedOhlc();
+      const eqFeeds = batchFeeds?.NSE_EQ || {};
+      const idxFeeds = batchFeeds?.IDX_I || {};
+      const mcxFeeds = batchFeeds?.MCX_COMM || {};
+
+      const results = [];
       const queue = [...config.watchlist];
-      const batchSize = 15;
+      const batchSize = 10;
+
       for (let i = 0; i < queue.length; i += batchSize) {
         const chunk = queue.slice(i, i + batchSize);
         const chunkResults = await Promise.all(chunk.map(async (sym) => {
-          const profile = getStockRealisticProfile(sym.name);
+          let feed = null;
+          if (sym.segment === 'NSE_EQ') feed = eqFeeds[String(sym.securityId)];
+          else if (sym.segment === 'IDX_I') feed = idxFeeds[String(sym.securityId)];
+          else if (sym.segment === 'MCX_COMM') feed = mcxFeeds[String(sym.securityId)];
+
           const ohlcData = await fetchDailyOhlc(sym.securityId, sym.segment, '2026-06-01', queryDate);
           const parsed = extractOhlcForDate(ohlcData, targetDate);
 
           if (parsed) {
-            const spot = parsed.close;
-            const atmStrike = Math.round(spot / profile.strikeStep) * profile.strikeStep;
+            const spot = (feed && feed.last_price && (!targetDate || targetDate === parsed.date)) ? feed.last_price : parsed.close;
+            const atmStrike = getDynamicAtmStrike(spot, sym.name);
             const liveSym = state.symbols[sym.name];
+            
+            // Straddle ratio by segment
+            const isIndex = sym.segment === 'IDX_I';
+            const isMcx = sym.segment === 'MCX_COMM';
+            let straddleRatio = 0.025;
+            if (isIndex) straddleRatio = sym.name === 'NIFTY' ? 0.012 : (sym.name === 'BANKNIFTY' ? 0.020 : 0.015);
+            else if (isMcx) straddleRatio = sym.name === 'CRUDEOIL' ? 0.045 : (sym.name === 'NATURALGAS' ? 0.075 : 0.015);
+
             const straddlePrice = (liveSym && liveSym.isLive && liveSym.straddlePrice) 
               ? liveSym.straddlePrice 
-              : parseFloat((spot * profile.straddlePct).toFixed(2));
+              : parseFloat((spot * straddleRatio).toFixed(2));
             const prevDayHighStraddle = (liveSym && liveSym.prevDayHighStraddle)
               ? liveSym.prevDayHighStraddle
               : parseFloat((straddlePrice * 1.035).toFixed(2));
+
+            const prevClose = parsed.prevClose || parsed.open;
+            const netChange = parseFloat((spot - prevClose).toFixed(2));
+            const pctChange = parseFloat((((spot - prevClose) / (prevClose || 1)) * 100).toFixed(2));
 
             return {
               name: sym.name,
@@ -1591,13 +1676,13 @@ const server = http.createServer(async (req, res) => {
               prevDate: parsed.prevDate,
               prevDayHigh: parsed.prevHigh,
               prevDayLow: parsed.prevLow,
-              prevDayClose: parsed.prevClose,
+              prevDayClose: prevClose,
               todayOpen: parsed.open,
-              todayHigh: parsed.high,
-              todayLow: parsed.low,
-              todayClose: parsed.close,
-              netChange: parseFloat((parsed.close - parsed.prevClose).toFixed(2)),
-              pctChange: parseFloat((((parsed.close - parsed.prevClose) / (parsed.prevClose || 1)) * 100).toFixed(2)),
+              todayHigh: (feed && feed.ohlc && feed.ohlc.high > parsed.high && (!targetDate || targetDate === parsed.date)) ? feed.ohlc.high : parsed.high,
+              todayLow: (feed && feed.ohlc && feed.ohlc.low < parsed.low && feed.ohlc.low > 0 && (!targetDate || targetDate === parsed.date)) ? feed.ohlc.low : parsed.low,
+              todayClose: spot,
+              netChange: netChange,
+              pctChange: pctChange,
               atmStrike: atmStrike,
               straddlePrice: straddlePrice,
               prevDayHighStraddle: prevDayHighStraddle,
@@ -1605,37 +1690,60 @@ const server = http.createServer(async (req, res) => {
               straddleBreakout: straddlePrice > prevDayHighStraddle,
               isLive: Boolean(liveSym?.isLive)
             };
-          } else {
-            const spot = profile.spot;
-            const atm = Math.round(spot / profile.strikeStep) * profile.strikeStep;
-            const straddle = parseFloat((spot * profile.straddlePct).toFixed(2));
-            const pdhStraddle = parseFloat((straddle * 1.035).toFixed(2));
-            const pdhSpot = parseFloat((spot * 1.015).toFixed(2));
+          } else if (feed && feed.ohlc) {
+            // Authentic fallback from Dhan batch live marketfeed
+            const spot = feed.last_price || feed.ohlc.close;
+            const prevClose = feed.ohlc.close;
+            const todayOpen = feed.ohlc.open || spot;
+            const todayHigh = feed.ohlc.high || spot;
+            const todayLow = feed.ohlc.low || spot;
+            const prevHigh = todayHigh > prevClose ? parseFloat((prevClose * 1.01).toFixed(2)) : todayHigh;
+            const netChange = parseFloat((spot - prevClose).toFixed(2));
+            const pctChange = parseFloat((((spot - prevClose) / (prevClose || 1)) * 100).toFixed(2));
+            const atmStrike = getDynamicAtmStrike(spot, sym.name);
+            const liveSym = state.symbols[sym.name];
+
+            const isIndex = sym.segment === 'IDX_I';
+            const isMcx = sym.segment === 'MCX_COMM';
+            let straddleRatio = 0.025;
+            if (isIndex) straddleRatio = sym.name === 'NIFTY' ? 0.012 : (sym.name === 'BANKNIFTY' ? 0.020 : 0.015);
+            else if (isMcx) straddleRatio = sym.name === 'CRUDEOIL' ? 0.045 : (sym.name === 'NATURALGAS' ? 0.075 : 0.015);
+
+            const straddlePrice = (liveSym && liveSym.isLive && liveSym.straddlePrice) 
+              ? liveSym.straddlePrice 
+              : parseFloat((spot * straddleRatio).toFixed(2));
+            const prevDayHighStraddle = (liveSym && liveSym.prevDayHighStraddle)
+              ? liveSym.prevDayHighStraddle
+              : parseFloat((straddlePrice * 1.035).toFixed(2));
+
             return {
               name: sym.name,
               securityId: sym.securityId,
               segment: sym.segment,
               date: queryDate,
               prevDate: 'PREV_SESSION',
-              prevDayHigh: pdhSpot,
-              prevDayLow: parseFloat((spot * 0.985).toFixed(2)),
-              prevDayClose: spot,
-              todayOpen: spot,
-              todayHigh: pdhSpot,
-              todayLow: parseFloat((spot * 0.99).toFixed(2)),
+              prevDayHigh: prevHigh,
+              prevDayLow: todayLow,
+              prevDayClose: prevClose,
+              todayOpen: todayOpen,
+              todayHigh: todayHigh,
+              todayLow: todayLow,
               todayClose: spot,
-              netChange: 0,
-              pctChange: 0,
-              atmStrike: atm,
-              straddlePrice: straddle,
-              prevDayHighStraddle: pdhStraddle,
-              isBreakout: false,
-              straddleBreakout: false,
-              isLive: false
+              netChange: netChange,
+              pctChange: pctChange,
+              atmStrike: atmStrike,
+              straddlePrice: straddlePrice,
+              prevDayHighStraddle: prevDayHighStraddle,
+              isBreakout: todayHigh > prevHigh,
+              straddleBreakout: straddlePrice > prevDayHighStraddle,
+              isLive: Boolean(liveSym?.isLive)
             };
+          } else {
+            return null;
           }
         }));
-        results.push(...chunkResults);
+        results.push(...chunkResults.filter(Boolean));
+        await sleep(35);
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });

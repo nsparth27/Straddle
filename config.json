@@ -29,17 +29,17 @@
     },
     {
       "name": "CRUDEOIL",
-      "securityId": 114,
+      "securityId": 569900,
       "segment": "MCX_COMM"
     },
     {
       "name": "NATURALGAS",
-      "securityId": 115,
+      "securityId": 570750,
       "segment": "MCX_COMM"
     },
     {
       "name": "GOLD",
-      "securityId": 495213,
+      "securityId": 483079,
       "segment": "MCX_COMM"
     },
     {
@@ -49,7 +49,7 @@
     },
     {
       "name": "COPPER",
-      "securityId": 111,
+      "securityId": 574829,
       "segment": "MCX_COMM"
     },
     {
