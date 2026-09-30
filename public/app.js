@@ -2640,5 +2640,41 @@ async function sendVerifyCsvToTelegram() {
   }
 }
 
+async function sendVerifyPdfToTelegram() {
+  showToast('⏳ Generating executive Bloomberg PDF report for Telegram...', 'warning');
+
+  try {
+    const res = await fetch('/api/send-verify-pdf-telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: currentVerifyDate })
+    });
+    const data = await res.json();
+
+    if (data.status === 'success') {
+      showToast(`📲 Executive PDF Report (${data.rowCount || 217} assets) delivered to Telegram!`, 'success');
+      fetchStatus();
+    } else {
+      showToast(`⚠️ ${data.message || 'Telegram PDF delivery failed'}`, 'error');
+    }
+  } catch (err) {
+    showToast(`❌ Failed to send PDF: ${err.message}`, 'error');
+  }
+}
+
+function downloadVerifyPdf() {
+  showToast('⏳ Preparing Executive Bloomberg PDF download...', 'warning');
+  const queryParam = currentVerifyDate ? `?date=${encodeURIComponent(currentVerifyDate)}` : '';
+  const url = `/api/download-verify-pdf${queryParam}`;
+  
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `Dhan_Straddle_Intelligence_${currentVerifyDate || 'Export'}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('📄 Download started for Executive Bloomberg PDF', 'success');
+}
+
 
 

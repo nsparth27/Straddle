@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { generateExecutivePdfReport } = require('./pdfGenerator');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -187,13 +188,16 @@ async function postTelegramMessage(botToken, chatId, message) {
   }
 }
 
-async function postTelegramDocument(botToken, chatId, fileContent, fileName, caption = '') {
+async function postTelegramDocument(botToken, chatId, fileContent, fileName, caption = '', mimeType = '') {
   if (!botToken || !chatId) return { ok: false, error: 'Missing token or chatId' };
   const url = `https://api.telegram.org/bot${botToken}/sendDocument`;
   try {
     const form = new FormData();
     form.append('chat_id', chatId);
-    const blob = new Blob([fileContent], { type: 'text/csv;charset=utf-8;' });
+    const isPdf = fileName.toLowerCase().endsWith('.pdf');
+    const defaultMime = isPdf ? 'application/pdf' : 'text/csv;charset=utf-8;';
+    const finalMime = mimeType || defaultMime;
+    const blob = new Blob([fileContent], { type: finalMime });
     form.append('document', blob, fileName);
     if (caption) {
       form.append('caption', caption);
@@ -203,7 +207,7 @@ async function postTelegramDocument(botToken, chatId, fileContent, fileName, cap
     const res = await safeFetch(url, {
       method: 'POST',
       body: form
-    }, 15000);
+    }, 25000);
     const data = await res.json();
     return { ok: res.ok && data.ok, status: res.status, data, messageId: data.result?.message_id, error: data?.description };
   } catch (err) {
@@ -332,11 +336,12 @@ async function sendTelegramAlert(message, meta = {}) {
   }
 }
 
-// Telegram Document Sender for CSV Data Exports (Dispatches to Both Accounts)
-async function sendTelegramDocument(csvContent, filename, caption = '', meta = {}) {
+// Telegram Document Sender for CSV & PDF Exports (Dispatches to Both Accounts)
+async function sendTelegramDocument(fileContent, filename, caption = '', meta = {}) {
   const timestamp = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
   const dateStr = getTodayIST();
   const msgId = `doc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const isPdf = filename.toLowerCase().endsWith('.pdf');
 
   const isAcc1Configured = Boolean(config.telegramBotToken && config.telegramChatId);
   const isAcc2Configured = Boolean(config.telegramAccount2Enabled && config.telegramChatId2 && (config.telegramBotToken2 || config.telegramBotToken));
@@ -347,16 +352,16 @@ async function sendTelegramDocument(csvContent, filename, caption = '', meta = {
     rawTimestamp: Date.now(),
     date: dateStr,
     symbol: '217 F&O & MCX',
-    atmStrike: 'FULL DATASET',
+    atmStrike: isPdf ? 'EXECUTIVE PDF' : 'FULL DATASET',
     straddlePrice: filename,
-    prevDayHighStraddle: 'CSV FILE',
+    prevDayHighStraddle: isPdf ? 'PDF REPORT' : 'CSV FILE',
     crossNum: 1,
     pctMove: `${meta.rowCount || 217} Rows`,
-    spot: 'CSV EXPORT',
-    status: 'CSV EXPORT',
+    spot: isPdf ? 'PDF EXPORT' : 'CSV EXPORT',
+    status: isPdf ? 'PDF EXPORT' : 'CSV EXPORT',
     deliveryState: 'sending',
     ticks: '✓',
-    text: `📁 <b>Document Attached:</b> <code>${filename}</code>\n${caption}`,
+    text: `${isPdf ? '📄' : '📁'} <b>Document Attached:</b> <code>${filename}</code>\n${caption}`,
     chatId: config.telegramChatId || '--',
     account1: {
       chatId: config.telegramChatId || '--',
@@ -386,10 +391,11 @@ async function sendTelegramDocument(csvContent, filename, caption = '', meta = {
     return { ok: false, message: entry.error, entry };
   }
 
+  const mimeType = isPdf ? 'application/pdf' : 'text/csv;charset=utf-8;';
   const promises = [];
   if (isAcc1Configured) {
     promises.push(
-      postTelegramDocument(config.telegramBotToken, config.telegramChatId, csvContent, filename, caption)
+      postTelegramDocument(config.telegramBotToken, config.telegramChatId, fileContent, filename, caption, mimeType)
         .then(res => {
           if (res.ok) {
             entry.account1.status = 'delivered';
@@ -408,7 +414,7 @@ async function sendTelegramDocument(csvContent, filename, caption = '', meta = {
   if (isAcc2Configured) {
     const token2 = config.telegramBotToken2 || config.telegramBotToken;
     promises.push(
-      postTelegramDocument(token2, config.telegramChatId2, csvContent, filename, caption)
+      postTelegramDocument(token2, config.telegramChatId2, fileContent, filename, caption, mimeType)
         .then(res => {
           if (res.ok) {
             entry.account2.status = 'delivered';
@@ -431,7 +437,7 @@ async function sendTelegramDocument(csvContent, filename, caption = '', meta = {
     entry.deliveryState = 'delivered';
     entry.ticks = '✓✓';
     entry.deliveredAt = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
-    addLog(`📤 [TELEGRAM CSV] Successfully delivered ${filename} (${meta.rowCount || 217} rows) to Telegram!`);
+    addLog(`📤 [TELEGRAM ${isPdf ? 'PDF' : 'CSV'}] Successfully delivered ${filename} (${meta.rowCount || 217} rows) to Telegram!`);
     return { ok: true, entry };
   } else {
     entry.deliveryState = 'failed';
@@ -2072,6 +2078,100 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'error', message: err.message }));
+    }
+    return;
+  }
+
+  if (pathname === '/api/send-verify-pdf-telegram') {
+    try {
+      let targetDate = parsedUrl.searchParams.get('date') || '';
+      if (req.method === 'POST') {
+        const body = await readJsonBody(req).catch(() => ({}));
+        if (body.date) targetDate = body.date;
+      }
+
+      const queryDate = targetDate || getTodayIST();
+      const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+      addLog(`📤 [TELEGRAM PDF] Generating Executive Bloomberg PDF report for ${queryDate}...`);
+      const results = await generateVerificationDataset(targetDate);
+
+      if (!results || results.length === 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error', message: 'No data records available to generate PDF.' }));
+        return;
+      }
+
+      const breakoutRows = results.filter(d => d.todayHigh > d.prevDayHigh || d.straddlePrice > d.prevDayHighStraddle);
+      const breakoutCount = breakoutRows.length;
+
+      const pdfBuffer = await generateExecutivePdfReport(results, {
+        date: queryDate,
+        time: timeStr
+      });
+
+      const filename = `Dhan_Straddle_Intelligence_${queryDate}.pdf`;
+      const caption = `╔════════════════════════════════════════╗\n` +
+        `📊 <b>DHAN STRADDLE PRO — EXECUTIVE PDF INTELLIGENCE REPORT</b>\n` +
+        `╚════════════════════════════════════════╝\n\n` +
+        `📅 <b>Trading Date:</b> <code>${queryDate}</code>\n` +
+        `⏰ <b>Generated:</b> <code>${timeStr} IST</code>\n` +
+        `🎯 <b>Monitored Universe:</b> <b>${results.length} Assets</b> (208 F&O, 4 Indices, 5 MCX)\n` +
+        `🚀 <b>Confirmed Breakouts:</b> <b>${breakoutCount} Assets</b>\n` +
+        `📄 <b>Executive PDF Attached:</b> <code>${filename}</code>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `<i>Bloomberg Terminal Unified Intelligence Suite</i>`;
+
+      const docResult = await sendTelegramDocument(pdfBuffer, filename, caption, { rowCount: results.length, type: 'pdf' });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: docResult.ok ? 'success' : 'partial_error',
+        message: docResult.ok ? `Executive PDF report (${results.length} assets) delivered to Telegram!` : (docResult.error || 'Failed to deliver PDF to Telegram'),
+        filename,
+        rowCount: results.length,
+        breakouts: breakoutCount,
+        result: docResult
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'error', message: err.message }));
+    }
+    return;
+  }
+
+  if (pathname === '/api/download-verify-pdf') {
+    try {
+      let targetDate = parsedUrl.searchParams.get('date') || '';
+      if (req.method === 'POST') {
+        const body = await readJsonBody(req).catch(() => ({}));
+        if (body.date) targetDate = body.date;
+      }
+
+      const queryDate = targetDate || getTodayIST();
+      const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+      const results = await generateVerificationDataset(targetDate);
+
+      if (!results || results.length === 0) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' });
+        res.end('No data available to generate PDF.');
+        return;
+      }
+
+      const pdfBuffer = await generateExecutivePdfReport(results, {
+        date: queryDate,
+        time: timeStr
+      });
+
+      const filename = `Dhan_Straddle_Intelligence_${queryDate}.pdf`;
+      res.writeHead(200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': pdfBuffer.length
+      });
+      res.end(pdfBuffer);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end(`Error generating PDF: ${err.message}`);
     }
     return;
   }

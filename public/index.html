@@ -631,8 +631,14 @@
               <button class="action-btn toggle-filters-btn" id="btnToggleVerifyFilters" onclick="toggleVerifyFilterMatrix()" title="Toggle Search & Multi-Column Filters">
                 <span id="verifyFilterBtnIcon">🔼</span> <span id="verifyFilterBtnText">HIDE FILTERS</span>
               </button>
+              <button class="action-btn telegram-pdf-btn" onclick="sendVerifyPdfToTelegram()" title="Send executive Bloomberg PDF intelligence report to both Telegram accounts in one click" style="background: linear-gradient(135deg, #FF6F00 0%, #D84315 100%); border-color: #FFB74D; color: #FFF; font-weight: 800;">
+                <span>📲</span> SEND PDF TO TELEGRAM
+              </button>
               <button class="action-btn telegram-csv-btn" onclick="sendVerifyCsvToTelegram()" title="Send complete 217-instrument CSV to both Telegram accounts in one click">
                 <span>📲</span> SEND CSV TO TELEGRAM
+              </button>
+              <button class="action-btn download-pdf-btn" onclick="downloadVerifyPdf()" title="Download Executive Bloomberg PDF report directly to your computer" style="background: #1E293B; border-color: #475569; color: #38BDF8; font-weight: 700;">
+                <span>📄</span> DOWNLOAD PDF
               </button>
               <button class="action-btn" onclick="loadVerificationData(currentVerifyDate)">
                 <span>🔄</span> REFRESH DATA
