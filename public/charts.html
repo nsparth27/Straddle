@@ -942,36 +942,6 @@
 </head>
 <body>
 
-  <!-- 🔒 SECURITY PIN LOCK MODAL -->
-  <div id="pinLockModal" class="pin-modal-overlay">
-    <div class="pin-card">
-      <div class="pin-badge" id="pinBadge">🔒 SECURITY LEVEL 1</div>
-      <div class="pin-header">
-        <span class="tag">BLOOMBERG AUTH</span>
-        <h2>ENTER ACCESS PIN</h2>
-      </div>
-      <p class="pin-desc" id="pinDesc">This terminal is private. Enter the 4-digit security PIN to unlock live market data &amp; controls.</p>
-      
-      <div class="pin-input-container" id="pinInputContainer">
-        <input type="password" id="pinInput" maxlength="4" placeholder="••••" autocomplete="off" autofocus inputmode="numeric" onkeydown="if(event.key==='Enter') verifyPin()" />
-        <button class="pin-submit-btn" id="pinSubmitBtn" onclick="verifyPin()">UNLOCK [ ↵ ]</button>
-      </div>
-      
-      <div id="pinError" class="pin-error-msg"></div>
-
-      <!-- 3-Attempts Lockout Message & Timer -->
-      <div id="pinLockoutBox" class="pin-lockout-box" style="display: none;">
-        <div class="lockout-timer" id="lockoutTimer">⏳ 05:00</div>
-        <div class="lockout-msg" style="color: var(--red-down); font-weight: 800; font-size: 0.95rem; margin: 0.4rem 0;">🚫 TERMINAL LOCKED (3 Failed Attempts)</div>
-        <div class="lockout-tribute" style="font-size: 0.85rem; color: #FFF; background: #000; padding: 0.75rem 0.9rem; border-radius: 6px; border: 1px dashed var(--amber-accent); line-height: 1.5; margin-top: 0.5rem;">
-          💬 <b>ruk jaoo .. sab karo , urgent ha to paide dedo 10k or greater than to parth dhulla</b>
-        </div>
-      </div>
-
-      <div class="pin-footer" id="pinAttemptsLabel" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">Attempts remaining: 3 / 3</div>
-    </div>
-  </div>
-
   <div class="app-shell">
 
     <!-- Header -->
@@ -1269,190 +1239,6 @@
   </div>
 
   <script>
-    // ==========================================
-    // 🔒 PIN AUTHENTICATION & 5-MIN LOCKOUT SYSTEM
-    // ==========================================
-    const TERMINAL_PIN = '2712';
-    const MAX_PIN_ATTEMPTS = 3;
-    const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutes
-    let lockoutInterval = null;
-
-    function checkTerminalAuth() {
-      const isAuth = sessionStorage.getItem('terminal_auth') === 'true' || localStorage.getItem('terminal_auth') === 'true';
-      const modal = document.getElementById('pinLockModal');
-      if (!modal) return isAuth;
-
-      const blockUntil = parseInt(localStorage.getItem('terminal_block_until') || '0', 10);
-      const now = Date.now();
-
-      if (blockUntil > now) {
-        modal.style.display = 'flex';
-        triggerLockoutState(blockUntil);
-        return false;
-      }
-
-      if (isAuth) {
-        sessionStorage.setItem('terminal_auth', 'true');
-        modal.style.display = 'none';
-        return true;
-      } else {
-        modal.style.display = 'flex';
-        resetPinInputUI();
-        const pinInput = document.getElementById('pinInput');
-        if (pinInput) setTimeout(() => pinInput.focus(), 150);
-        return false;
-      }
-    }
-
-    function resetPinInputUI() {
-      const inputContainer = document.getElementById('pinInputContainer');
-      const lockoutBox = document.getElementById('pinLockoutBox');
-      const attemptsLabel = document.getElementById('pinAttemptsLabel');
-      const errorEl = document.getElementById('pinError');
-      const pinInput = document.getElementById('pinInput');
-
-      if (lockoutInterval) {
-        clearInterval(lockoutInterval);
-        lockoutInterval = null;
-      }
-
-      if (inputContainer) inputContainer.style.display = 'flex';
-      if (lockoutBox) lockoutBox.style.display = 'none';
-      if (errorEl) {
-        errorEl.textContent = '';
-        errorEl.style.display = 'none';
-      }
-      if (pinInput) {
-        pinInput.disabled = false;
-        pinInput.value = '';
-      }
-
-      const failCount = parseInt(localStorage.getItem('terminal_fail_count') || '0', 10);
-      const remaining = Math.max(0, MAX_PIN_ATTEMPTS - failCount);
-      if (attemptsLabel) {
-        attemptsLabel.textContent = `Attempts remaining: ${remaining} / ${MAX_PIN_ATTEMPTS}`;
-        attemptsLabel.style.color = remaining <= 1 ? '#FF3D57' : 'var(--text-muted)';
-      }
-    }
-
-    function triggerLockoutState(blockUntil) {
-      const inputContainer = document.getElementById('pinInputContainer');
-      const lockoutBox = document.getElementById('pinLockoutBox');
-      const timerEl = document.getElementById('lockoutTimer');
-      const attemptsLabel = document.getElementById('pinAttemptsLabel');
-      const errorEl = document.getElementById('pinError');
-
-      if (inputContainer) inputContainer.style.display = 'none';
-      if (errorEl) errorEl.style.display = 'none';
-      if (lockoutBox) lockoutBox.style.display = 'flex';
-      if (attemptsLabel) {
-        attemptsLabel.textContent = '🔒 Security Lockout Active (3 Failed Attempts)';
-        attemptsLabel.style.color = '#FF3D57';
-      }
-
-      function updateTimer() {
-        const remainingMs = blockUntil - Date.now();
-        if (remainingMs <= 0) {
-          if (lockoutInterval) clearInterval(lockoutInterval);
-          lockoutInterval = null;
-          localStorage.removeItem('terminal_fail_count');
-          localStorage.removeItem('terminal_block_until');
-          resetPinInputUI();
-          const pinInput = document.getElementById('pinInput');
-          if (pinInput) pinInput.focus();
-          return;
-        }
-
-        const totalSeconds = Math.ceil(remainingMs / 1000);
-        const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
-        const secs = String(totalSeconds % 60).padStart(2, '0');
-        if (timerEl) timerEl.textContent = `⏳ ${mins}:${secs}`;
-      }
-
-      updateTimer();
-      if (lockoutInterval) clearInterval(lockoutInterval);
-      lockoutInterval = setInterval(updateTimer, 1000);
-    }
-
-    function verifyPin() {
-      const blockUntil = parseInt(localStorage.getItem('terminal_block_until') || '0', 10);
-      if (blockUntil > Date.now()) {
-        triggerLockoutState(blockUntil);
-        return;
-      }
-
-      const pinInput = document.getElementById('pinInput');
-      const errorEl = document.getElementById('pinError');
-      const modal = document.getElementById('pinLockModal');
-      const card = modal?.querySelector('.pin-card');
-      const val = (pinInput?.value || '').trim();
-
-      if (!val) {
-        if (errorEl) {
-          errorEl.textContent = 'Please enter the 4-digit PIN.';
-          errorEl.style.display = 'block';
-        }
-        return;
-      }
-
-      try {
-        const res = await fetch('/api/verify-pin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pin: val })
-        });
-        const data = await res.json();
-
-        if (res.ok && data.ok) {
-          sessionStorage.setItem('terminal_auth', 'true');
-          localStorage.setItem('terminal_auth', 'true');
-          if (data.token) {
-            sessionStorage.setItem('terminal_session', data.token);
-            localStorage.setItem('terminal_session', data.token);
-          }
-          localStorage.removeItem('terminal_block_until');
-          if (modal) modal.style.display = 'none';
-          if (errorEl) errorEl.style.display = 'none';
-          pollData();
-          return;
-        }
-
-        // Incorrect PIN or lockout
-        if (pinInput) {
-          pinInput.value = '';
-          pinInput.focus();
-        }
-        if (card) {
-          card.classList.add('shake');
-          setTimeout(() => card.classList.remove('shake'), 500);
-        }
-
-        if (data.locked) {
-          const lockUntil = Date.now() + (data.remainingSecs || 300) * 1000;
-          localStorage.setItem('terminal_block_until', lockUntil);
-          triggerLockoutState(lockUntil);
-        } else {
-          if (errorEl) {
-            errorEl.textContent = `❌ ${data.message || 'Incorrect PIN!'}`;
-            errorEl.style.display = 'block';
-          }
-        }
-      } catch (err) {
-        if (errorEl) {
-          errorEl.textContent = `Connection error: ${err.message}`;
-          errorEl.style.display = 'block';
-        }
-      }
-    }
-
-    function lockTerminal() {
-      sessionStorage.removeItem('terminal_auth');
-      sessionStorage.removeItem('terminal_session');
-      localStorage.removeItem('terminal_auth');
-      localStorage.removeItem('terminal_session');
-      checkTerminalAuth();
-    }
-
     let activeRule = 'RULE_DIVERGING';
     let activeFilter = 'ALL';
     let searchQuery = '';
@@ -2091,13 +1877,11 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      if (checkTerminalAuth()) {
-        pollData();
-      }
+      pollData();
     });
 
     setInterval(pollData, 2000);
-    checkTerminalAuth();
+    pollData();
     updateRuleBanner();
   </script>
 </body>
